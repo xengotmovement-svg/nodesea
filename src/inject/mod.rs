@@ -64,21 +64,21 @@ mod tests {
     }
 
     #[test]
-    fn stub_elf_injector_returns_error() {
+    fn elf_injector_rejects_empty_binary() {
         let injector = elf::ElfInjector;
         let mut binary = Vec::new();
         let blob = b"test";
-        let err = injector.inject(&mut binary, blob).unwrap_err();
-        assert!(err.to_string().contains("not yet implemented"));
+        // Empty binary is not valid ELF, so injection should fail.
+        assert!(injector.inject(&mut binary, blob).is_err());
     }
 
     #[test]
-    fn stub_macho_injector_returns_error() {
+    fn macho_injector_rejects_empty_binary() {
         let injector = macho::MachoInjector;
         let mut binary = Vec::new();
         let blob = b"test";
         let err = injector.inject(&mut binary, blob).unwrap_err();
-        assert!(err.to_string().contains("not yet implemented"));
+        assert!(err.to_string().contains("binary parse error"));
     }
 
     #[test]
