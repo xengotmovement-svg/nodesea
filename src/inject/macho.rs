@@ -191,11 +191,7 @@ impl Injector for MachoInjector {
             }
         }
 
-        let available_space = if first_segment_fileoff > new_cmd_offset {
-            first_segment_fileoff - new_cmd_offset
-        } else {
-            0
-        };
+        let available_space = first_segment_fileoff.saturating_sub(new_cmd_offset);
 
         if available_space < LC_ENTRY_SIZE {
             return Err(Error::InsufficientHeaderSpace {
@@ -417,7 +413,11 @@ mod tests {
             Mach::Binary(_) => original.clone(),
             Mach::Fat(fat) => {
                 // Extract the first arch that's a 64-bit binary
-                let arch = fat.iter_arches().flatten().next().expect("no arches in fat binary");
+                let arch = fat
+                    .iter_arches()
+                    .flatten()
+                    .next()
+                    .expect("no arches in fat binary");
                 let start = arch.offset as usize;
                 let end = start + arch.size as usize;
                 original[start..end].to_vec()
@@ -450,9 +450,7 @@ mod tests {
             if name == "NODE_SEA" {
                 found_segment = true;
                 for (section, _data) in seg.sections().expect("sections") {
-                    let sect_name = section
-                        .name()
-                        .expect("section name");
+                    let sect_name = section.name().expect("section name");
                     if sect_name == "__NODE_SEA_BLOB" {
                         found_section = true;
                         section_offset = Some(section.offset as usize);
@@ -469,10 +467,6 @@ mod tests {
         let offset = section_offset.expect("section offset");
         let size = section_size.expect("section size");
         assert_eq!(size, blob.len(), "section size mismatch");
-        assert_eq!(
-            &binary[offset..offset + size],
-            blob,
-            "blob data mismatch"
-        );
+        assert_eq!(&binary[offset..offset + size], blob, "blob data mismatch");
     }
 }

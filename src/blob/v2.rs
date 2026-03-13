@@ -11,7 +11,7 @@
 //! Body is the same as V1, with an additional exec_argv string list
 //! appended when the `INCLUDE_EXEC_ARGV` flag is set.
 
-use super::{write_string_view, SeaFlags, SEA_MAGIC};
+use super::{SEA_MAGIC, SeaFlags, write_string_view};
 use crate::error::Result;
 
 /// V2 header size in bytes: magic(4) + flags(4) + exec_argv_extension(1).
@@ -92,8 +92,7 @@ mod tests {
 
     #[test]
     fn v2_header_is_9_bytes() {
-        let blob =
-            serialize("/sea/main.js", b"code", SeaFlags::empty(), None, None, None).unwrap();
+        let blob = serialize("/sea/main.js", b"code", SeaFlags::empty(), None, None, None).unwrap();
         // magic(4) + flags(4) + exec_argv_extension(1) = 9
         assert_eq!(&blob[0..4], &SEA_MAGIC.to_le_bytes());
         assert_eq!(&blob[4..8], &0u32.to_le_bytes());
@@ -124,10 +123,7 @@ mod tests {
         // After header(9) + code_path(8+12) + main_code(8+4), exec_argv list
         let offset = 9 + (8 + 12) + (8 + 4);
         // Count = 2
-        assert_eq!(
-            &blob[offset..offset + 8],
-            &2u64.to_le_bytes()
-        );
+        assert_eq!(&blob[offset..offset + 8], &2u64.to_le_bytes());
     }
 
     #[test]

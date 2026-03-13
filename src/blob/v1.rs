@@ -13,7 +13,7 @@
 //! - code_cache (only if USE_CODE_CACHE flag)
 //! - assets map (only if INCLUDE_ASSETS flag): u64 count + (key + value) pairs
 
-use super::{write_string_view, SeaFlags, SEA_MAGIC};
+use super::{SEA_MAGIC, SeaFlags, write_string_view};
 use crate::error::Result;
 
 /// V1 header size in bytes: magic(4) + flags(4).
@@ -65,8 +65,14 @@ mod tests {
 
     #[test]
     fn serialize_minimal_blob() {
-        let blob = serialize("/sea/main.js", b"console.log('hi')", SeaFlags::empty(), None, None)
-            .unwrap();
+        let blob = serialize(
+            "/sea/main.js",
+            b"console.log('hi')",
+            SeaFlags::empty(),
+            None,
+            None,
+        )
+        .unwrap();
 
         // Header: 8 bytes
         assert_eq!(&blob[0..4], &SEA_MAGIC.to_le_bytes()); // magic
@@ -74,10 +80,7 @@ mod tests {
 
         // code_path: u64 len + bytes
         let code_path = b"/sea/main.js";
-        assert_eq!(
-            &blob[8..16],
-            &(code_path.len() as u64).to_le_bytes()
-        );
+        assert_eq!(&blob[8..16], &(code_path.len() as u64).to_le_bytes());
         assert_eq!(&blob[16..16 + code_path.len()], code_path.as_slice());
 
         // main_code: u64 len + bytes
@@ -149,20 +152,11 @@ mod tests {
         // After header + code_path + main_code, assets map should follow
         let offset = 8 + (8 + 12) + (8 + 4);
         // Count = 1
-        assert_eq!(
-            &blob[offset..offset + 8],
-            &1u64.to_le_bytes()
-        );
+        assert_eq!(&blob[offset..offset + 8], &1u64.to_le_bytes());
         // Key: "config.json"
         let key_offset = offset + 8;
-        assert_eq!(
-            &blob[key_offset..key_offset + 8],
-            &(11u64).to_le_bytes()
-        );
-        assert_eq!(
-            &blob[key_offset + 8..key_offset + 8 + 11],
-            b"config.json"
-        );
+        assert_eq!(&blob[key_offset..key_offset + 8], &(11u64).to_le_bytes());
+        assert_eq!(&blob[key_offset + 8..key_offset + 8 + 11], b"config.json");
     }
 
     #[test]

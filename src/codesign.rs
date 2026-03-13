@@ -79,10 +79,7 @@ mod tests {
 
         // After stripping, the binary should fail strict verification.
         let valid_before = verify_signature(&dest).expect("verify_signature failed");
-        assert!(
-            !valid_before,
-            "signature should be invalid after stripping"
-        );
+        assert!(!valid_before, "signature should be invalid after stripping");
 
         // Re-sign with ad-hoc signature.
         codesign_adhoc(&dest).expect("codesign_adhoc failed");

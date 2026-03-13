@@ -34,8 +34,8 @@ fn main() -> Result<()> {
 
     // 1. Load and validate sea-config.json.
     eprintln!("[nodesea] Loading config from {}", cli.config.display());
-    let config = nodesea::config::from_path(&cli.config)
-        .context("failed to load sea-config.json")?;
+    let config =
+        nodesea::config::from_path(&cli.config).context("failed to load sea-config.json")?;
 
     // 2. Resolve the config directory for relative paths.
     let config_dir = cli
@@ -54,8 +54,8 @@ fn main() -> Result<()> {
     eprintln!("[nodesea] Using node binary: {}", node_path.display());
 
     // 4. Detect Node version.
-    let node_version = nodesea::version::detect_version(&node_path)
-        .context("failed to detect Node.js version")?;
+    let node_version =
+        nodesea::version::detect_version(&node_path).context("failed to detect Node.js version")?;
     eprintln!("[nodesea] Detected Node.js version: {node_version}");
 
     // 5. Determine blob version.
@@ -159,12 +159,7 @@ fn main() -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&output_path, std::fs::Permissions::from_mode(0o755))
-            .with_context(|| {
-                format!(
-                    "failed to set permissions on {}",
-                    output_path.display()
-                )
-            })?;
+            .with_context(|| format!("failed to set permissions on {}", output_path.display()))?;
     }
 
     // 11. Read the output binary, inject the blob, and write it back.
@@ -172,8 +167,7 @@ fn main() -> Result<()> {
     let mut binary = std::fs::read(&output_path)
         .with_context(|| format!("failed to read output binary: {}", output_path.display()))?;
 
-    nodesea::inject::inject(&mut binary, &blob)
-        .context("failed to inject SEA blob into binary")?;
+    nodesea::inject::inject(&mut binary, &blob).context("failed to inject SEA blob into binary")?;
 
     // 12. Flip the fuse.
     eprintln!("[nodesea] Flipping SEA fuse...");
@@ -197,10 +191,7 @@ fn main() -> Result<()> {
 
     // 14. Success.
     eprintln!();
-    eprintln!(
-        "[nodesea] Success! Output: {}",
-        output_path.display()
-    );
+    eprintln!("[nodesea] Success! Output: {}", output_path.display());
 
     Ok(())
 }

@@ -83,10 +83,7 @@ mod tests {
     fn flip_fuse_changes_zero_to_one() {
         let mut binary = make_binary(FUSE_SENTINEL);
         assert!(flip_fuse(&mut binary).is_ok());
-        assert_eq!(
-            &binary[8..8 + FUSE_ENABLED.len()],
-            FUSE_ENABLED,
-        );
+        assert_eq!(&binary[8..8 + FUSE_ENABLED.len()], FUSE_ENABLED,);
     }
 
     #[test]

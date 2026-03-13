@@ -82,8 +82,8 @@ impl SeaConfig {
 /// Read, parse, and validate a `sea-config.json` file at the given path.
 pub fn from_path(path: impl AsRef<Path>) -> Result<SeaConfig> {
     let contents = std::fs::read_to_string(path.as_ref())?;
-    let config: SeaConfig = serde_json::from_str(&contents)
-        .map_err(|e| Error::InvalidConfig(e.to_string()))?;
+    let config: SeaConfig =
+        serde_json::from_str(&contents).map_err(|e| Error::InvalidConfig(e.to_string()))?;
     config.validate()?;
     Ok(config)
 }

@@ -1,0 +1,5 @@
+{
+  "main": "hello.js",
+  "output": "hello-sea",
+  "disableExperimentalSEAWarning": true
+}

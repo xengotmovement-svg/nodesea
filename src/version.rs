@@ -22,7 +22,9 @@ pub fn detect_version(node_path: &Path) -> Result<Version> {
     let output = Command::new(node_path)
         .arg("--version")
         .output()
-        .map_err(|e| Error::VersionDetectionFailed(format!("failed to run {}: {e}", node_path.display())))?;
+        .map_err(|e| {
+            Error::VersionDetectionFailed(format!("failed to run {}: {e}", node_path.display()))
+        })?;
 
     if !output.status.success() {
         return Err(Error::VersionDetectionFailed(format!(
@@ -38,7 +40,7 @@ pub fn detect_version(node_path: &Path) -> Result<Version> {
 
 /// Parse a version string like `"v22.12.0"` or `"v22.12.0\n"` into a `semver::Version`.
 fn parse_version_string(raw: &str) -> Result<Version> {
-    let trimmed = raw.trim().trim_start_matches(|c| c == 'v' || c == 'V');
+    let trimmed = raw.trim().trim_start_matches(['v', 'V']);
     Version::parse(trimmed)
         .map_err(|e| Error::VersionDetectionFailed(format!("invalid version string {raw:?}: {e}")))
 }

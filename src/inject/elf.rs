@@ -42,6 +42,7 @@ fn build_elf_note(name: &[u8], desc: &[u8], note_type: u32) -> Vec<u8> {
 }
 
 /// Write an ELF64 program header entry at `offset` in `binary`.
+#[allow(clippy::too_many_arguments)]
 fn write_phdr64(
     binary: &mut [u8],
     offset: usize,
@@ -96,11 +97,7 @@ impl Injector for ElfInjector {
         // Parse to validate this is actually an ELF binary.
         let elf = match goblin::Object::parse(binary) {
             Ok(goblin::Object::Elf(elf)) => elf,
-            Ok(_) => {
-                return Err(Error::UnsupportedFormat(
-                    "binary is not ELF format".into(),
-                ))
-            }
+            Ok(_) => return Err(Error::UnsupportedFormat("binary is not ELF format".into())),
             Err(e) => return Err(Error::GoblinError(e.to_string())),
         };
 
@@ -155,7 +152,7 @@ impl Injector for ElfInjector {
             actual_new_phdr_offset = new_phoff + e_phnum * PHDR_SIZE;
 
             // Update e_phoff in the ELF header.
-            write_u64_le(binary, 0x20, actual_phoff as u64);
+            write_u64_le(binary, 0x20, new_phoff as u64);
         }
 
         // Append the note to the end of the file.
@@ -167,14 +164,14 @@ impl Injector for ElfInjector {
         write_phdr64(
             binary,
             actual_new_phdr_offset,
-            4,                      // PT_NOTE
-            4,                      // PF_R
-            note_offset as u64,     // p_offset
-            0,                      // p_vaddr
-            0,                      // p_paddr
-            note_size,              // p_filesz
-            note_size,              // p_memsz
-            4,                      // p_align
+            4,                  // PT_NOTE
+            4,                  // PF_R
+            note_offset as u64, // p_offset
+            0,                  // p_vaddr
+            0,                  // p_paddr
+            note_size,          // p_filesz
+            note_size,          // p_memsz
+            4,                  // p_align
         )
         .map_err(|e| Error::BlobError(format!("failed to write phdr: {e}")))?;
 
@@ -208,7 +205,12 @@ mod tests {
         assert_eq!(name_padded, 16);
         assert_eq!(&note[12..12 + NOTE_NAME.len()], NOTE_NAME);
         // Padding bytes should be zero.
-        assert_eq!(note[12 + NOTE_NAME.len()..12 + name_padded].iter().all(|&b| b == 0), true);
+        assert_eq!(
+            note[12 + NOTE_NAME.len()..12 + name_padded]
+                .iter()
+                .all(|&b| b == 0),
+            true
+        );
 
         // Descriptor starts after padded name.
         let desc_start = 12 + name_padded;
@@ -273,7 +275,9 @@ mod tests {
             phdr_offset as usize,
             1, // PT_LOAD
             5, // PF_R | PF_X
-            0, 0, 0,
+            0,
+            0,
+            0,
             total as u64,
             total as u64,
             0x1000,
@@ -344,9 +348,7 @@ mod tests {
         assert_eq!(e_phoff, original_len);
 
         // The relocated first phdr should match PT_LOAD (type=1).
-        let p_type = u32::from_le_bytes(
-            binary[e_phoff..e_phoff + 4].try_into().unwrap(),
-        );
+        let p_type = u32::from_le_bytes(binary[e_phoff..e_phoff + 4].try_into().unwrap());
         assert_eq!(p_type, 1); // PT_LOAD
 
         // The second phdr (new PT_NOTE) comes right after.
