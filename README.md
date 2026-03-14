@@ -30,6 +30,16 @@ git clone https://github.com/user/nodesea.git && cd nodesea
 cargo install --path .
 ```
 
+## Uninstall
+
+```bash
+# Remove the binary
+rm $(which nodesea)
+
+# Remove cached Node.js downloads (optional)
+rm -rf ~/.nodesea
+```
+
 ## Quick Start
 
 ```bash
