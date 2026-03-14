@@ -18,6 +18,7 @@
 
 pub mod blob;
 pub mod bundle;
+pub mod code_cache;
 pub mod codesign;
 pub mod config;
 pub mod error;

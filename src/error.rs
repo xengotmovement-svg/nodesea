@@ -44,6 +44,10 @@ pub enum Error {
     #[error("code signing failed: {0}")]
     CodesignFailed(String),
 
+    /// Code cache generation failed.
+    #[error("code cache error: {0}")]
+    CodeCacheError(String),
+
     /// I/O error.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

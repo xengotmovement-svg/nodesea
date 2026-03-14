@@ -44,6 +44,10 @@ struct Cli {
     #[arg(long)]
     no_sign: bool,
 
+    /// Skip V8 code cache generation.
+    #[arg(long)]
+    no_code_cache: bool,
+
     /// Validate and show what would be done, without modifying files.
     #[arg(long)]
     dry_run: bool,
@@ -85,7 +89,7 @@ fn resolve_config(cli: &Cli) -> Result<(nodesea::config::SeaConfig, PathBuf)> {
                 output,
                 disable_experimental_sea_warning: true,
                 use_snapshot: false,
-                use_code_cache: false,
+                use_code_cache: true,
                 assets: Default::default(),
                 exec_argv: Default::default(),
             };
@@ -143,9 +147,33 @@ fn main() -> Result<()> {
         asset_data.push((name.clone(), data));
     }
 
-    // 7. Serialize the blob.
-    let flags = config.to_flags();
+    // 7. Generate V8 code cache (unless opted out).
     let code_path = format!("/sea/{}", config.main);
+    let code_cache_bytes = if config.use_code_cache && !cli.no_code_cache {
+        eprintln!("[nodesea] Generating V8 code cache...");
+        match nodesea::code_cache::generate_code_cache(&node_path, &main_code, &code_path) {
+            Ok(cache) => {
+                eprintln!("[nodesea] Code cache: {} bytes", cache.len());
+                Some(cache)
+            }
+            Err(e) => {
+                eprintln!("[nodesea] Warning: code cache generation failed: {e}");
+                eprintln!("[nodesea] Continuing without code cache.");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 8. Serialize the blob.
+    let mut flags = config.to_flags();
+    // Ensure the flag matches what we actually have.
+    if code_cache_bytes.is_some() {
+        flags |= nodesea::blob::SeaFlags::USE_CODE_CACHE;
+    } else {
+        flags -= nodesea::blob::SeaFlags::USE_CODE_CACHE;
+    }
 
     let assets_refs: Vec<(&str, &[u8])> = asset_data
         .iter()
@@ -169,7 +197,7 @@ fn main() -> Result<()> {
         &code_path,
         &main_code,
         flags,
-        None,
+        code_cache_bytes.as_deref(),
         assets_opt,
         exec_argv_opt,
     )

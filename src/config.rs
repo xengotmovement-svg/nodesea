@@ -10,6 +10,10 @@ use serde::Deserialize;
 use crate::blob::SeaFlags;
 use crate::error::{Error, Result};
 
+fn default_true() -> bool {
+    true
+}
+
 /// Parsed representation of a `sea-config.json` file.
 ///
 /// Field names use `camelCase` to match the Node.js JSON format.
@@ -31,7 +35,7 @@ pub struct SeaConfig {
     pub use_snapshot: bool,
 
     /// Whether to include a V8 code cache in the blob.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub use_code_cache: bool,
 
     /// Map of virtual asset name to file path on disk.
@@ -102,7 +106,7 @@ mod tests {
         assert_eq!(config.output, "hello");
         assert!(!config.disable_experimental_sea_warning);
         assert!(!config.use_snapshot);
-        assert!(!config.use_code_cache);
+        assert!(config.use_code_cache);
         assert!(config.assets.is_empty());
         assert!(config.exec_argv.is_empty());
     }
@@ -152,7 +156,7 @@ mod tests {
         let json = r#"{ "main": "hello.js", "output": "hello" }"#;
         let config: SeaConfig = serde_json::from_str(json).unwrap();
         let flags = config.to_flags();
-        assert_eq!(flags, SeaFlags::DEFAULT);
+        assert_eq!(flags, SeaFlags::USE_CODE_CACHE);
     }
 
     #[test]
