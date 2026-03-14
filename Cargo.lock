@@ -1083,7 +1083,7 @@ checksum = "a5eb86a92577833b75522336f210c49d9ebd7dd55a44d80a92e68c668a75f27c"
 
 [[package]]
 name = "nodesea"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bitflags",
