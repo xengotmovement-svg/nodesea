@@ -26,7 +26,6 @@ flate2 = "1"
 tar = "0.4"
 rolldown = { git = "https://github.com/rolldown/rolldown.git", rev = "1ee3871" }
 rolldown_common = { git = "https://github.com/rolldown/rolldown.git", rev = "1ee3871" }
+rolldown_utils = { git = "https://github.com/rolldown/rolldown.git", rev = "1ee3871" }
 tokio = { version = "1", features = ["rt", "macros"] }
-
-[dev-dependencies]
 tempfile = "3"

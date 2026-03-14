@@ -1092,6 +1092,7 @@ dependencies = [
  "goblin",
  "rolldown",
  "rolldown_common",
+ "rolldown_utils",
  "scroll",
  "semver",
  "serde",
