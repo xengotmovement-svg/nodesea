@@ -6,6 +6,7 @@ Takes a JavaScript source file and a Node.js binary, produces a standalone execu
 
 ## Features
 
+- **Built-in bundling** — automatically bundles imports and `node_modules` via [rolldown](https://rolldown.rs)
 - **Zero Node.js dependency** — no `node`, `npm`, or `postject` needed during build
 - **Multi-version support** — Node.js 20.x through 25.x+ (blob V1 and V2 formats)
 - **Cross-platform injection** — Mach-O (macOS), ELF (Linux), PE (Windows, planned)
@@ -44,8 +45,31 @@ nodesea --config sea-config.json       # use Node.js-compatible config file
 | `-o, --output` | Output executable path (default: script name without extension) |
 | `--config <path>` | Path to `sea-config.json` (alternative to positional arg) |
 | `--node <path>` | Path to Node.js binary (default: `node` in PATH) |
+| `--no-bundle` | Skip bundling — embed the script as-is |
 | `--no-sign` | Skip macOS ad-hoc code signing |
 | `--dry-run` | Validate and show build plan without modifying files |
+
+## Bundling
+
+By default, nodesea bundles your script and all its imports into a single file using [rolldown](https://rolldown.rs). This means `import`/`require` of local files and `node_modules` just works:
+
+```js
+// app.js
+import express from 'express';
+import { handler } from './handler.js';
+
+const app = express();
+app.get('/', handler);
+app.listen(3000);
+```
+
+```bash
+nodesea app.js    # bundles express + handler.js into the binary
+```
+
+Node.js built-in modules (`fs`, `path`, `http`, etc.) are automatically treated as external.
+
+Use `--no-bundle` to skip bundling and embed a single file as-is.
 
 ## sea-config.json
 

@@ -17,6 +17,7 @@
 //! 7. Re-sign on macOS (ad-hoc codesign)
 
 pub mod blob;
+pub mod bundle;
 pub mod codesign;
 pub mod config;
 pub mod error;

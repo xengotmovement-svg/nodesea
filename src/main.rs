@@ -29,6 +29,10 @@ struct Cli {
     #[arg(long)]
     node: Option<PathBuf>,
 
+    /// Skip bundling — embed the script as-is without resolving imports.
+    #[arg(long)]
+    no_bundle: bool,
+
     /// Skip macOS ad-hoc code signing.
     #[arg(long)]
     no_sign: bool,
@@ -117,10 +121,16 @@ fn main() -> Result<()> {
     let blob_version = nodesea::version::blob_version(&node_version)
         .context("failed to determine blob version")?;
 
-    // 5. Read the main JS file.
+    // 5. Bundle or read the main JS file.
     let main_path = base_dir.join(&config.main);
-    let main_code = std::fs::read(&main_path)
-        .with_context(|| format!("failed to read: {}", main_path.display()))?;
+    let main_code = if cli.no_bundle {
+        std::fs::read(&main_path)
+            .with_context(|| format!("failed to read: {}", main_path.display()))?
+    } else {
+        eprintln!("[nodesea] Bundling {}...", main_path.display());
+        nodesea::bundle::bundle(&main_path)
+            .with_context(|| format!("failed to bundle: {}", main_path.display()))?
+    };
 
     // 6. Read asset files.
     let mut asset_data: Vec<(String, Vec<u8>)> = Vec::new();
