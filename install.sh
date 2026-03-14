@@ -2,7 +2,7 @@
 # Install nodesea — download the latest release binary.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/user/nodesea/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Dunqing/nodesea/main/install.sh | sh
 #
 # Options:
 #   NODESEA_VERSION  — specific version (default: latest)
@@ -10,7 +10,7 @@
 
 set -e
 
-REPO="user/nodesea"
+REPO="Dunqing/nodesea"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 # Detect platform.

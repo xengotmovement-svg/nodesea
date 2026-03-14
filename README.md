@@ -20,13 +20,13 @@ Takes a JavaScript or TypeScript source file and a Node.js binary, produces a st
 
 ```bash
 # One-line install (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/user/nodesea/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Dunqing/nodesea/main/install.sh | sh
 
 # Or download from GitHub Releases
-# https://github.com/user/nodesea/releases
+# https://github.com/Dunqing/nodesea/releases
 
 # Or build from source
-git clone https://github.com/user/nodesea.git && cd nodesea
+git clone https://github.com/Dunqing/nodesea.git && cd nodesea
 cargo install --path .
 ```
 
@@ -212,7 +212,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 ## Building from Source
 
 ```bash
-git clone https://github.com/user/nodesea.git
+git clone https://github.com/Dunqing/nodesea.git
 cd nodesea
 cargo build --release
 ```
