@@ -2,11 +2,12 @@
 
 Pure Rust Node.js Single Executable Application (SEA) builder.
 
-Takes a JavaScript source file and a Node.js binary, produces a standalone executable — **without requiring Node.js at build time**.
+Takes a JavaScript or TypeScript source file and a Node.js binary, produces a standalone executable — **without requiring Node.js at build time**.
 
 ## Features
 
 - **Built-in bundling** — automatically bundles imports and `node_modules` via [rolldown](https://rolldown.rs)
+- **TypeScript support** — `.ts` files are bundled natively, no `tsc` or `tsconfig.json` needed
 - **Zero Node.js dependency** — no `node`, `npm`, or `postject` needed during build
 - **Multi-version support** — Node.js 20.x through 25.x+ (blob V1 and V2 formats)
 - **Cross-platform injection** — Mach-O (macOS), ELF (Linux), PE (Windows, planned)
