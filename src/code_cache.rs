@@ -43,7 +43,7 @@ process.stdout.write(compiled.cachedData);
         .arg(&source_file)
         .arg(code_path)
         .output()
-        .map_err(|e| Error::Io(e))?;
+        .map_err(Error::Io)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

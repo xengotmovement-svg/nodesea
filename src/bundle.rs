@@ -14,7 +14,7 @@
 //!
 //! This avoids any manual ESM→CJS string manipulation — rolldown does it all.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::error::{Error, Result};
 
@@ -62,7 +62,7 @@ pub fn bundle(entry: &Path) -> Result<Vec<u8>> {
 /// Pass 1: ESM bundle → single file with only external imports remaining.
 /// Wrap:   Move `await` into an async IIFE so it's no longer top-level.
 /// Pass 2: CJS bundle → rolldown converts imports, polyfills import.meta, etc.
-async fn two_pass_bundle(entry: &str, cwd: &PathBuf) -> Result<Vec<u8>> {
+async fn two_pass_bundle(entry: &str, cwd: &Path) -> Result<Vec<u8>> {
     // Pass 1: Bundle as ESM (TLA is allowed).
     let esm_code = try_bundle(entry, cwd, rolldown::OutputFormat::Esm)
         .await
@@ -86,7 +86,7 @@ async fn two_pass_bundle(entry: &str, cwd: &PathBuf) -> Result<Vec<u8>> {
     // No TLA error because `await` is now inside a function.
     let cjs_code = try_bundle(
         "./__nodesea_bundle.mjs",
-        &tmp_dir.path().to_path_buf(),
+        tmp_dir.path(),
         rolldown::OutputFormat::Cjs,
     )
     .await
@@ -187,12 +187,12 @@ fn build_define_map() -> rolldown_utils::indexmap::FxIndexMap<String, String> {
 /// Run rolldown with the given output format and return the entry chunk code.
 async fn try_bundle(
     entry: &str,
-    cwd: &PathBuf,
+    cwd: &Path,
     format: rolldown::OutputFormat,
 ) -> std::result::Result<Vec<u8>, String> {
     let mut bundler = rolldown::Bundler::new(rolldown::BundlerOptions {
         input: Some(vec![entry.to_string().into()]),
-        cwd: Some(cwd.clone()),
+        cwd: Some(cwd.to_path_buf()),
         platform: Some(rolldown::Platform::Node),
         format: Some(format),
         code_splitting: Some(rolldown_common::CodeSplittingMode::Bool(false)),
