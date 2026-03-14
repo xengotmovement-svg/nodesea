@@ -34,7 +34,7 @@ struct Cli {
     /// Accepts major, major.minor, or exact versions. Only used when
     /// downloading; ignored if --node is set or node is in PATH.
     #[arg(long, default_value = "22")]
-    node_version: Option<String>,
+    node_version: String,
 
     /// Skip bundling — embed the script as-is without resolving imports.
     #[arg(long)]
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
     let (config, base_dir) = resolve_config(&cli)?;
 
     // 2. Locate Node binary (explicit path > PATH > auto-download).
-    let node_path = nodesea::node::resolve_node(cli.node.as_deref(), cli.node_version.as_deref())
+    let node_path = nodesea::node::resolve_node(cli.node.as_deref(), Some(&cli.node_version))
         .context("could not find or download Node.js")?;
     eprintln!("[nodesea] Using node: {}", node_path.display());
 

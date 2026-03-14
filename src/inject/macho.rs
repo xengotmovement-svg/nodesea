@@ -496,19 +496,11 @@ mod tests {
     use super::*;
 
     /// Find a Mach-O binary with enough header space for injection.
-    /// Prefers the Node.js binary (which has ample space), falls back to
-    /// `which node`, then /usr/bin/true. Returns None if no suitable
-    /// single-arch binary is available.
+    /// Uses `which node` to locate a Node.js binary. Returns None if
+    /// no suitable single-arch binary is available.
     fn find_test_binary() -> Option<Vec<u8>> {
-        let candidates = ["/tmp/node-v22.16.0-darwin-arm64/bin/node"];
-
-        // Also try `which node`
         let which_node = which::which("node").ok();
-        let all_paths: Vec<&std::path::Path> = candidates
-            .iter()
-            .map(std::path::Path::new)
-            .chain(which_node.as_deref())
-            .collect();
+        let all_paths: Vec<&std::path::Path> = which_node.as_deref().into_iter().collect();
 
         for path in all_paths {
             if let Ok(data) = std::fs::read(path) {

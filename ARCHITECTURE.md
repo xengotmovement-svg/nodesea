@@ -177,7 +177,7 @@ validation". This constraint drives the entire relocation strategy above.
 The blob is injected as a `PT_NOTE` program header entry:
 
 - **Note name:** `NODE_SEA_BLOB`
-- **Note type:** `NT_GNU_BUILD_ID` (typically 3)
+- **Note type:** `0` (Node.js matches by name, not type)
 
 The injection appends a properly aligned ELF note to the binary and adds
 (or repurposes) a `PT_NOTE` entry in the program header table pointing to it.
