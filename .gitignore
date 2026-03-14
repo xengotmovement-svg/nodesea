@@ -1,4 +1,7 @@
 /target
 
+# Built SEA binaries
 /greeting
-/examples/
+/hello
+/main
+/http-server
