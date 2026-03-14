@@ -55,10 +55,7 @@ fn arch() -> Result<&'static str> {
 /// 1. If `explicit` is `Some`, use that path directly.
 /// 2. If `node` is found in PATH, use it.
 /// 3. Download from nodejs.org and cache.
-pub fn resolve_node(
-    explicit: Option<&Path>,
-    version: Option<&str>,
-) -> Result<PathBuf> {
+pub fn resolve_node(explicit: Option<&Path>, version: Option<&str>) -> Result<PathBuf> {
     // 1. Explicit --node flag.
     if let Some(p) = explicit {
         return Ok(p.to_path_buf());
@@ -160,16 +157,12 @@ pub fn download_node(version: &str) -> Result<PathBuf> {
     // Build download URL.
     let (url, is_tar) = if plat == "win" {
         (
-            format!(
-                "https://nodejs.org/dist/v{version}/{dir_name}.zip"
-            ),
+            format!("https://nodejs.org/dist/v{version}/{dir_name}.zip"),
             false,
         )
     } else {
         (
-            format!(
-                "https://nodejs.org/dist/v{version}/{dir_name}.tar.gz"
-            ),
+            format!("https://nodejs.org/dist/v{version}/{dir_name}.tar.gz"),
             true,
         )
     };
@@ -189,10 +182,7 @@ pub fn download_node(version: &str) -> Result<PathBuf> {
         .read_to_end(&mut body)
         .map_err(|e| Error::DownloadFailed(format!("read body: {e}")))?;
 
-    eprintln!(
-        "[nodesea] Downloaded {} MB",
-        body.len() / (1024 * 1024)
-    );
+    eprintln!("[nodesea] Downloaded {} MB", body.len() / (1024 * 1024));
 
     // Extract.
     std::fs::create_dir_all(&cache)
@@ -246,8 +236,7 @@ fn extract_tar_gz(data: &[u8], dest: &Path, expected_prefix: &str) -> Result<()>
         let path_str = path.to_string_lossy();
 
         // Only extract bin/node (the binary we need).
-        let is_node_bin = path_str.ends_with("/bin/node")
-            && path_str.starts_with(expected_prefix);
+        let is_node_bin = path_str.ends_with("/bin/node") && path_str.starts_with(expected_prefix);
 
         if !is_node_bin {
             continue;

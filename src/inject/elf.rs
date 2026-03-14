@@ -205,11 +205,10 @@ mod tests {
         assert_eq!(name_padded, 16);
         assert_eq!(&note[12..12 + NOTE_NAME.len()], NOTE_NAME);
         // Padding bytes should be zero.
-        assert_eq!(
+        assert!(
             note[12 + NOTE_NAME.len()..12 + name_padded]
                 .iter()
-                .all(|&b| b == 0),
-            true
+                .all(|&b| b == 0)
         );
 
         // Descriptor starts after padded name.

@@ -110,11 +110,8 @@ fn main() -> Result<()> {
     let (config, base_dir) = resolve_config(&cli)?;
 
     // 2. Locate Node binary (explicit path > PATH > auto-download).
-    let node_path = nodesea::node::resolve_node(
-        cli.node.as_deref(),
-        cli.node_version.as_deref(),
-    )
-    .context("could not find or download Node.js")?;
+    let node_path = nodesea::node::resolve_node(cli.node.as_deref(), cli.node_version.as_deref())
+        .context("could not find or download Node.js")?;
     eprintln!("[nodesea] Using node: {}", node_path.display());
 
     // 3. Detect Node version.

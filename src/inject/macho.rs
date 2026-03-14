@@ -49,7 +49,12 @@ fn align_up(value: usize, align: usize) -> usize {
 
 /// Read a u32 LE from binary at the given offset.
 fn read_u32(binary: &[u8], off: usize) -> u32 {
-    u32::from_le_bytes([binary[off], binary[off + 1], binary[off + 2], binary[off + 3]])
+    u32::from_le_bytes([
+        binary[off],
+        binary[off + 1],
+        binary[off + 2],
+        binary[off + 3],
+    ])
 }
 
 /// Read a u64 LE from binary at the given offset.
@@ -206,16 +211,16 @@ impl Injector for MachoInjector {
         // e) Update __LINKEDIT's fileoff
         //
         // This ensures __LINKEDIT is the LAST segment data in the file.
-        let linkedit = find_linkedit(binary, ncmds).ok_or_else(|| {
-            Error::GoblinError("__LINKEDIT segment not found".into())
-        })?;
+        let linkedit = find_linkedit(binary, ncmds)
+            .ok_or_else(|| Error::GoblinError("__LINKEDIT segment not found".into()))?;
 
         let linkedit_cmd_offset = linkedit.cmd_offset;
         let old_linkedit_fileoff = linkedit.fileoff as usize;
         let old_linkedit_filesize = linkedit.filesize as usize;
 
         // Save __LINKEDIT data
-        let linkedit_data = binary[old_linkedit_fileoff..old_linkedit_fileoff + old_linkedit_filesize].to_vec();
+        let linkedit_data =
+            binary[old_linkedit_fileoff..old_linkedit_fileoff + old_linkedit_filesize].to_vec();
 
         // Truncate to just before __LINKEDIT
         binary.truncate(old_linkedit_fileoff);
@@ -238,7 +243,11 @@ impl Injector for MachoInjector {
         // linkedit_cmd_offset + LC_ENTRY_SIZE, but we update it now at
         // linkedit_cmd_offset since the shift hasn't happened yet.
         let new_linkedit_filesize = linkedit_data.len() as u64;
-        pwrite_u64(binary, new_linkedit_fileoff as u64, linkedit_cmd_offset + 40)?;
+        pwrite_u64(
+            binary,
+            new_linkedit_fileoff as u64,
+            linkedit_cmd_offset + 40,
+        )?;
         pwrite_u64(binary, new_linkedit_filesize, linkedit_cmd_offset + 48)?;
         let new_linkedit_vmsize = align_up(linkedit_data.len(), page_size) as u64;
         pwrite_u64(binary, new_linkedit_vmsize, linkedit_cmd_offset + 32)?;
@@ -345,33 +354,55 @@ impl Injector for MachoInjector {
         let segname = padded_name_16("NODE_SEA");
 
         // segment_command_64 (72 bytes)
-        pwrite_u32(binary, LC_SEGMENT_64, off)?; off += 4;          // cmd
-        pwrite_u32(binary, LC_ENTRY_SIZE as u32, off)?; off += 4;   // cmdsize
-        binary[off..off + 16].copy_from_slice(&segname); off += 16; // segname
-        pwrite_u64(binary, seg_vmaddr, off)?; off += 8;             // vmaddr
-        pwrite_u64(binary, seg_vmsize, off)?; off += 8;             // vmsize
-        pwrite_u64(binary, blob_file_offset as u64, off)?; off += 8; // fileoff
+        pwrite_u32(binary, LC_SEGMENT_64, off)?;
+        off += 4; // cmd
+        pwrite_u32(binary, LC_ENTRY_SIZE as u32, off)?;
+        off += 4; // cmdsize
+        binary[off..off + 16].copy_from_slice(&segname);
+        off += 16; // segname
+        pwrite_u64(binary, seg_vmaddr, off)?;
+        off += 8; // vmaddr
+        pwrite_u64(binary, seg_vmsize, off)?;
+        off += 8; // vmsize
+        pwrite_u64(binary, blob_file_offset as u64, off)?;
+        off += 8; // fileoff
         let seg_filesize = align_up(blob.len(), page_size) as u64;
-        pwrite_u64(binary, seg_filesize, off)?; off += 8;           // filesize
-        pwrite_u32(binary, 1, off)?; off += 4;                      // maxprot (VM_PROT_READ)
-        pwrite_u32(binary, 1, off)?; off += 4;                      // initprot (VM_PROT_READ)
-        pwrite_u32(binary, 1, off)?; off += 4;                      // nsects
-        pwrite_u32(binary, 0, off)?; off += 4;                      // flags
+        pwrite_u64(binary, seg_filesize, off)?;
+        off += 8; // filesize
+        pwrite_u32(binary, 1, off)?;
+        off += 4; // maxprot (VM_PROT_READ)
+        pwrite_u32(binary, 1, off)?;
+        off += 4; // initprot (VM_PROT_READ)
+        pwrite_u32(binary, 1, off)?;
+        off += 4; // nsects
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // flags
 
         // section_64 (80 bytes)
         let sectname = padded_name_16("__NODE_SEA_BLOB");
-        binary[off..off + 16].copy_from_slice(&sectname); off += 16; // sectname
-        binary[off..off + 16].copy_from_slice(&segname); off += 16;  // segname
-        pwrite_u64(binary, seg_vmaddr, off)?; off += 8;              // addr
-        pwrite_u64(binary, blob.len() as u64, off)?; off += 8;       // size
-        pwrite_u32(binary, blob_file_offset as u32, off)?; off += 4;  // offset
-        pwrite_u32(binary, 0, off)?; off += 4;                        // align
-        pwrite_u32(binary, 0, off)?; off += 4;                        // reloff
-        pwrite_u32(binary, 0, off)?; off += 4;                        // nreloc
-        pwrite_u32(binary, 0, off)?; off += 4;                        // flags
-        pwrite_u32(binary, 0, off)?; off += 4;                        // reserved1
-        pwrite_u32(binary, 0, off)?; off += 4;                        // reserved2
-        pwrite_u32(binary, 0, off)?;                                   // reserved3
+        binary[off..off + 16].copy_from_slice(&sectname);
+        off += 16; // sectname
+        binary[off..off + 16].copy_from_slice(&segname);
+        off += 16; // segname
+        pwrite_u64(binary, seg_vmaddr, off)?;
+        off += 8; // addr
+        pwrite_u64(binary, blob.len() as u64, off)?;
+        off += 8; // size
+        pwrite_u32(binary, blob_file_offset as u32, off)?;
+        off += 4; // offset
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // align
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // reloff
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // nreloc
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // flags
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // reserved1
+        pwrite_u32(binary, 0, off)?;
+        off += 4; // reserved2
+        pwrite_u32(binary, 0, off)?; // reserved3
 
         // Step 7: Update mach_header_64
         ncmds += 1;
@@ -470,9 +501,7 @@ mod tests {
     /// single-arch binary is available.
     #[cfg(target_os = "macos")]
     fn find_test_binary() -> Option<Vec<u8>> {
-        let candidates = [
-            "/tmp/node-v22.16.0-darwin-arm64/bin/node",
-        ];
+        let candidates = ["/tmp/node-v22.16.0-darwin-arm64/bin/node"];
 
         // Also try `which node`
         let which_node = which::which("node").ok();
@@ -568,7 +597,9 @@ mod tests {
         };
 
         let blob = b"test_sea_blob_data_for_codesign";
-        MachoInjector.inject(&mut binary, blob).expect("injection failed");
+        MachoInjector
+            .inject(&mut binary, blob)
+            .expect("injection failed");
 
         // Write to a temp file and try to codesign it
         let dir = tempfile::tempdir().unwrap();
@@ -611,7 +642,10 @@ mod tests {
         let blob = b"test_blob";
         let result = MachoInjector.inject(&mut binary, blob);
         assert!(
-            matches!(result, Err(crate::error::Error::InsufficientHeaderSpace { .. })),
+            matches!(
+                result,
+                Err(crate::error::Error::InsufficientHeaderSpace { .. })
+            ),
             "expected InsufficientHeaderSpace, got: {result:?}"
         );
     }
