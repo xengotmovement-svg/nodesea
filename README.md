@@ -98,6 +98,61 @@ For advanced options, use a config file compatible with [Node.js SEA config form
 | `assets` | no | Map of virtual name to file path |
 | `execArgv` | no | Baked-in Node.js flags (Node 24.6+) |
 
+## Why nodesea?
+
+Node.js has built-in SEA support, but the official workflow requires multiple tools and manual steps. Other tools like `pkg` are abandoned. nodesea replaces the entire toolchain with a single command.
+
+### Comparison
+
+| | nodesea | Node.js built-in SEA | pkg |
+|---|---|---|---|
+| **Build command** | `nodesea app.js` | 5-step process (see below) | `pkg app.js` |
+| **Requires Node.js at build time** | No | Yes | Yes |
+| **Requires npm packages** | No | Yes (`postject`) | Yes (`pkg`) |
+| **Bundling** | Built-in (rolldown) | None — manual step | Built-in |
+| **Config file** | Optional | Required | Optional |
+| **macOS code signing** | Automatic | Manual step | Automatic |
+| **Implementation** | Pure Rust | Node.js + JS + C++ | Node.js |
+| **Node.js 20–25 support** | Yes (auto-detected) | Version-specific | Stopped at Node 18 |
+| **Maintained** | Yes | Yes | Abandoned |
+
+### The official Node.js SEA workflow
+
+The built-in approach requires running five separate commands and installing an npm package:
+
+```bash
+# 1. Write a JSON config
+echo '{"main":"app.js","output":"sea-prep.blob"}' > sea-config.json
+
+# 2. Generate the blob (requires node)
+node --experimental-sea-config sea-config.json
+
+# 3. Copy the node binary
+cp $(which node) myapp
+
+# 4. Inject the blob (requires npm install postject)
+npx postject myapp NODE_SEA_BLOB sea-prep.blob \
+    --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+# 5. Re-sign on macOS
+codesign --sign - --force myapp
+```
+
+### With nodesea
+
+```bash
+nodesea app.js
+```
+
+That's it. One command, no intermediate files, no npm, no manual signing.
+
+### Key advantages
+
+- **Single binary, zero runtime deps** — nodesea is a standalone Rust binary. Drop it into a CI pipeline or Docker build stage without installing Node.js or npm.
+- **Built-in bundling** — imports and `node_modules` are resolved automatically via rolldown. No need to run esbuild/webpack as a separate step.
+- **Cross-version** — automatically detects the Node.js version and selects the correct blob format (V1 or V2). Works with Node 20 through 25+.
+- **Correct by default** — handles Mach-O segment layout, fuse flipping, ad-hoc code signing, and `__LINKEDIT` relocation without user intervention.
+
 ## How It Works
 
 1. **Parse config** — read `sea-config.json` and validate
