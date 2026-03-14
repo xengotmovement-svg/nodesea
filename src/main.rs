@@ -30,9 +30,10 @@ struct Cli {
     #[arg(long)]
     node: Option<PathBuf>,
 
-    /// Node.js version to download (e.g. "22.16.0"). Only used when
+    /// Node.js version to download (e.g. "22", "24", "22.16.0").
+    /// Accepts major, major.minor, or exact versions. Only used when
     /// downloading; ignored if --node is set or node is in PATH.
-    #[arg(long)]
+    #[arg(long, default_value = "22")]
     node_version: Option<String>,
 
     /// Skip bundling — embed the script as-is without resolving imports.

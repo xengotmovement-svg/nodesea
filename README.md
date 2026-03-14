@@ -47,7 +47,7 @@ nodesea --config sea-config.json       # use Node.js-compatible config file
 | `-o, --output` | Output executable path (default: script name without extension) |
 | `--config <path>` | Path to `sea-config.json` (alternative to positional arg) |
 | `--node <path>` | Path to Node.js binary (default: `node` in PATH, or auto-download) |
-| `--node-version <ver>` | Node.js version to download (default: `22.16.0`) |
+| `--node-version <ver>` | Node.js version to download — `22`, `24`, `22.16.0` (default: `22`) |
 | `--no-bundle` | Skip bundling — embed the script as-is |
 | `--no-sign` | Skip macOS ad-hoc code signing |
 | `--dry-run` | Validate and show build plan without modifying files |

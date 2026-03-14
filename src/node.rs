@@ -9,8 +9,11 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
-/// Default Node.js version to download when none is specified.
-const DEFAULT_NODE_VERSION: &str = "22.16.0";
+/// Default Node.js major version to download when none is specified.
+const DEFAULT_NODE_MAJOR: &str = "22";
+
+/// URL for the Node.js release index.
+const NODE_DIST_INDEX: &str = "https://nodejs.org/dist/index.json";
 
 /// Return the cache directory: `~/.nodesea/cache/`.
 fn cache_dir() -> Result<PathBuf> {
@@ -67,8 +70,68 @@ pub fn resolve_node(
     }
 
     // 3. Download.
-    let ver = version.unwrap_or(DEFAULT_NODE_VERSION);
-    download_node(ver)
+    let input = version.unwrap_or(DEFAULT_NODE_MAJOR);
+    let resolved = resolve_version(input)?;
+    download_node(&resolved)
+}
+
+/// Resolve a version specifier to an exact version string.
+///
+/// Accepts:
+/// - Full version: `"22.16.0"` → `"22.16.0"`
+/// - Major only: `"22"` → latest 22.x.x release
+/// - Major.minor: `"22.16"` → latest 22.16.x release
+///
+/// Queries `https://nodejs.org/dist/index.json` for partial versions.
+pub fn resolve_version(input: &str) -> Result<String> {
+    let parts: Vec<&str> = input.split('.').collect();
+
+    // Already a full x.y.z version — use as-is.
+    if parts.len() == 3 && parts.iter().all(|p| p.chars().all(|c| c.is_ascii_digit())) {
+        return Ok(input.to_string());
+    }
+
+    // Need to resolve — fetch the release index.
+    eprintln!("[nodesea] Resolving Node.js v{input}...");
+
+    let response = ureq::get(NODE_DIST_INDEX)
+        .call()
+        .map_err(|e| Error::DownloadFailed(format!("fetch release index: {e}")))?;
+
+    let mut body = String::new();
+    response
+        .into_body()
+        .into_reader()
+        .read_to_string(&mut body)
+        .map_err(|e| Error::DownloadFailed(format!("read release index: {e}")))?;
+
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&body)
+        .map_err(|e| Error::DownloadFailed(format!("parse release index: {e}")))?;
+
+    let prefix = format!("v{input}.");
+
+    // The index is sorted newest-first. Find the first entry matching our prefix.
+    for entry in &entries {
+        if let Some(version) = entry.get("version").and_then(|v| v.as_str()) {
+            let matches = match parts.len() {
+                // Major only: "22" matches "v22.x.y"
+                1 => version.starts_with(&prefix),
+                // Major.minor: "22.16" matches "v22.16.y"
+                2 => version.starts_with(&prefix),
+                _ => false,
+            };
+
+            if matches {
+                let resolved = version.trim_start_matches('v');
+                eprintln!("[nodesea] Resolved to v{resolved}");
+                return Ok(resolved.to_string());
+            }
+        }
+    }
+
+    Err(Error::DownloadFailed(format!(
+        "no Node.js release found matching v{input}"
+    )))
 }
 
 /// Download a Node.js binary from nodejs.org and return the path to it.
