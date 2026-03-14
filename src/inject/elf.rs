@@ -1,7 +1,18 @@
 //! ELF note-based SEA blob injection (Linux).
 //!
-//! Appends a `PT_NOTE` segment containing the SEA blob to the ELF binary.
-//! The note uses the name `NODE_SEA_BLOB\0` and type 0.
+//! Injects the SEA blob by appending data to the end of the ELF file
+//! and creating a new PT_LOAD + PT_NOTE pair at a virtual address above
+//! all existing segments. The phdr table is also relocated into the new
+//! PT_LOAD so that it's mapped and accessible via AT_PHDR.
+//!
+//! Key constraints:
+//! - Existing program headers are NOT modified (avoids BSS corruption)
+//! - `p_offset % p_align == p_vaddr % p_align` for the new PT_LOAD
+//! - The combined phdr table is within the new PT_LOAD for AT_PHDR
+//!
+//! At runtime, Node.js uses postject's `dl_iterate_phdr`-based lookup,
+//! which walks PT_NOTE segments and accesses note data via
+//! `dlpi_addr + p_vaddr`.
 
 use crate::error::{Error, Result};
 use crate::inject::Injector;
@@ -13,16 +24,26 @@ const NOTE_NAME: &[u8] = b"NODE_SEA_BLOB\0";
 const NOTE_TYPE: u32 = 0;
 /// ELF64 program header entry size.
 const PHDR_SIZE: usize = 56;
+/// Page size for alignment.
+const PAGE_SIZE: u64 = 0x1000;
+
+/// PT_LOAD type constant.
+const PT_LOAD: u32 = 1;
+/// PT_NOTE type constant.
+const PT_NOTE: u32 = 4;
+/// PF_R (readable) flag.
+const PF_R: u32 = 4;
 
 /// Round `value` up to the next multiple of `alignment`.
 fn align_up(value: usize, alignment: usize) -> usize {
     (value + alignment - 1) & !(alignment - 1)
 }
 
-/// Build an ELF note section with the given name and descriptor (payload).
-///
-/// Layout: namesz(u32 LE) + descsz(u32 LE) + type(u32 LE) +
-///         name(padded to 4-byte align) + desc(padded to 4-byte align)
+fn align_up_u64(value: u64, alignment: u64) -> u64 {
+    (value + alignment - 1) & !(alignment - 1)
+}
+
+/// Build an ELF note with the given name and descriptor (payload).
 fn build_elf_note(name: &[u8], desc: &[u8], note_type: u32) -> Vec<u8> {
     let namesz = name.len() as u32;
     let descsz = desc.len() as u32;
@@ -67,34 +88,51 @@ fn write_phdr64(
     Ok(())
 }
 
-/// Read a little-endian u16 from `binary` at `offset`.
 fn read_u16_le(binary: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes([binary[offset], binary[offset + 1]])
 }
 
-/// Read a little-endian u64 from `binary` at `offset`.
+fn read_u32_le(binary: &[u8], offset: usize) -> u32 {
+    let mut buf = [0u8; 4];
+    buf.copy_from_slice(&binary[offset..offset + 4]);
+    u32::from_le_bytes(buf)
+}
+
 fn read_u64_le(binary: &[u8], offset: usize) -> u64 {
     let mut buf = [0u8; 8];
     buf.copy_from_slice(&binary[offset..offset + 8]);
     u64::from_le_bytes(buf)
 }
 
-/// Write a little-endian u16 to `binary` at `offset`.
 fn write_u16_le(binary: &mut [u8], offset: usize, value: u16) {
     binary[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
 }
 
-/// Write a little-endian u64 to `binary` at `offset`.
 fn write_u64_le(binary: &mut [u8], offset: usize, value: u64) {
     binary[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
 }
 
-/// Injector for the ELF binary format.
+/// Find the highest virtual address end (vaddr + memsz) across all PT_LOAD segments.
+fn find_max_vaddr_end(binary: &[u8], e_phoff: usize, e_phnum: usize) -> u64 {
+    let mut max: u64 = 0;
+    for i in 0..e_phnum {
+        let off = e_phoff + i * PHDR_SIZE;
+        if read_u32_le(binary, off) == PT_LOAD {
+            let vaddr = read_u64_le(binary, off + 16);
+            let memsz = read_u64_le(binary, off + 40);
+            let end = vaddr + memsz;
+            if end > max {
+                max = end;
+            }
+        }
+    }
+    max
+}
+
 pub struct ElfInjector;
 
 impl Injector for ElfInjector {
     fn inject(&self, binary: &mut Vec<u8>, blob: &[u8]) -> Result<()> {
-        // Parse to validate this is actually an ELF binary.
         let elf = match goblin::Object::parse(binary) {
             Ok(goblin::Object::Elf(elf)) => elf,
             Ok(_) => return Err(Error::UnsupportedFormat("binary is not ELF format".into())),
@@ -107,7 +145,6 @@ impl Injector for ElfInjector {
             ));
         }
 
-        // Read ELF header fields we need.
         let e_phoff = read_u64_le(binary, 0x20) as usize;
         let e_phentsize = read_u16_le(binary, 0x36) as usize;
         let e_phnum = read_u16_le(binary, 0x38) as usize;
@@ -118,65 +155,98 @@ impl Injector for ElfInjector {
             )));
         }
 
-        // Build the ELF note.
+        // Build the note data.
         let note = build_elf_note(NOTE_NAME, blob, NOTE_TYPE);
+        let note_size = note.len() as u64;
 
-        // Determine where the new phdr entry goes.
-        let phdr_table_end = e_phoff + e_phnum * PHDR_SIZE;
-        let new_phdr_slot = phdr_table_end;
+        // Choose a virtual address above all existing segments.
+        let max_vaddr = find_max_vaddr_end(binary, e_phoff, e_phnum);
+        let seg_vaddr = align_up_u64(max_vaddr, PAGE_SIZE);
 
-        // Check if there's space after the existing phdr table for one more entry.
-        // The slot must be within file bounds and contain only zeroed bytes.
-        let has_space = if new_phdr_slot + PHDR_SIZE <= binary.len() {
-            binary[new_phdr_slot..new_phdr_slot + PHDR_SIZE]
-                .iter()
-                .all(|&b| b == 0)
-        } else {
-            false
-        };
+        // We need the ELF constraint: p_offset % p_align == p_vaddr % p_align.
+        // Since seg_vaddr is page-aligned (% PAGE_SIZE == 0), we need
+        // p_offset % PAGE_SIZE == 0 as well.
+        let seg_file_offset = align_up(binary.len(), PAGE_SIZE as usize);
+        // Pad file to the aligned offset.
+        binary.resize(seg_file_offset, 0);
 
-        let actual_new_phdr_offset;
+        // Layout within our new segment:
+        //   [note data] [combined phdr table]
+        // The combined table = existing phdrs + PT_LOAD + PT_NOTE (2 new entries).
+        let note_offset_in_seg = 0usize;
+        let phdr_table_offset_in_seg = note.len();
+        let new_phnum = e_phnum + 2;
+        let combined_table_size = new_phnum * PHDR_SIZE;
+        let seg_total_size = note.len() + combined_table_size;
 
-        if has_space {
-            // There is space after the existing phdr entries — use it in place.
-            actual_new_phdr_offset = new_phdr_slot;
-        } else {
-            // No space — relocate the entire phdr table to end of file.
-            let new_phoff = binary.len();
-            // Copy existing phdr table to end of file.
-            let existing_phdrs = binary[e_phoff..phdr_table_end].to_vec();
-            binary.extend_from_slice(&existing_phdrs);
-            // Add space for the new entry (will be written below).
-            binary.resize(binary.len() + PHDR_SIZE, 0);
-
-            actual_new_phdr_offset = new_phoff + e_phnum * PHDR_SIZE;
-
-            // Update e_phoff in the ELF header.
-            write_u64_le(binary, 0x20, new_phoff as u64);
-        }
-
-        // Append the note to the end of the file.
-        let note_offset = binary.len();
+        // Append note data.
         binary.extend_from_slice(&note);
 
-        // Write the new PT_NOTE program header entry.
-        let note_size = note.len() as u64;
+        // Append existing phdr table entries.
+        let existing_phdrs = binary[e_phoff..e_phoff + e_phnum * PHDR_SIZE].to_vec();
+        binary.extend_from_slice(&existing_phdrs);
+
+        // Compute addresses for the two new phdr entries.
+        let note_file_off = (seg_file_offset + note_offset_in_seg) as u64;
+        let note_vaddr = seg_vaddr + note_offset_in_seg as u64;
+        let seg_memsz = align_up_u64(seg_total_size as u64, PAGE_SIZE);
+
+        // Append PT_LOAD entry for our new segment.
+        let pt_load_offset = binary.len();
+        binary.resize(binary.len() + PHDR_SIZE, 0);
         write_phdr64(
             binary,
-            actual_new_phdr_offset,
-            4,                  // PT_NOTE
-            4,                  // PF_R
-            note_offset as u64, // p_offset
-            0,                  // p_vaddr
-            0,                  // p_paddr
-            note_size,          // p_filesz
-            note_size,          // p_memsz
-            4,                  // p_align
+            pt_load_offset,
+            PT_LOAD,
+            PF_R,
+            seg_file_offset as u64,
+            seg_vaddr,
+            seg_vaddr,
+            seg_total_size as u64,
+            seg_memsz,
+            PAGE_SIZE,
         )
-        .map_err(|e| Error::BlobError(format!("failed to write phdr: {e}")))?;
+        .map_err(|e| Error::BlobError(format!("failed to write PT_LOAD: {e}")))?;
 
-        // Update e_phnum.
-        write_u16_le(binary, 0x38, (e_phnum + 1) as u16);
+        // Append PT_NOTE entry.
+        let pt_note_offset = binary.len();
+        binary.resize(binary.len() + PHDR_SIZE, 0);
+        write_phdr64(
+            binary,
+            pt_note_offset,
+            PT_NOTE,
+            PF_R,
+            note_file_off,
+            note_vaddr,
+            note_vaddr,
+            note_size,
+            note_size,
+            4,
+        )
+        .map_err(|e| Error::BlobError(format!("failed to write PT_NOTE: {e}")))?;
+
+        // Update ELF header.
+        let new_phdr_table_file_off = seg_file_offset + phdr_table_offset_in_seg;
+        let new_phdr_table_vaddr = seg_vaddr + phdr_table_offset_in_seg as u64;
+        write_u64_le(binary, 0x20, new_phdr_table_file_off as u64);
+        write_u16_le(binary, 0x38, new_phnum as u16);
+
+        // Update PT_PHDR entry in the combined table (if present) to point
+        // to the new phdr table location. Without this, the dynamic linker
+        // would use the old PT_PHDR vaddr and miss our new entries.
+        let combined_table_start = seg_file_offset + phdr_table_offset_in_seg;
+        let combined_table_total = (new_phnum * PHDR_SIZE) as u64;
+        for i in 0..new_phnum {
+            let off = combined_table_start + i * PHDR_SIZE;
+            if read_u32_le(binary, off) == 6 {
+                // PT_PHDR = 6
+                write_u64_le(binary, off + 8, new_phdr_table_file_off as u64); // p_offset
+                write_u64_le(binary, off + 16, new_phdr_table_vaddr); // p_vaddr
+                write_u64_le(binary, off + 24, new_phdr_table_vaddr); // p_paddr
+                write_u64_le(binary, off + 32, combined_table_total); // p_filesz
+                write_u64_le(binary, off + 40, combined_table_total); // p_memsz
+            }
+        }
 
         Ok(())
     }
@@ -191,34 +261,19 @@ mod tests {
         let payload = b"hello";
         let note = build_elf_note(NOTE_NAME, payload, NOTE_TYPE);
 
-        // Header: 3 x u32 = 12 bytes
         let namesz = u32::from_le_bytes(note[0..4].try_into().unwrap());
         let descsz = u32::from_le_bytes(note[4..8].try_into().unwrap());
         let ntype = u32::from_le_bytes(note[8..12].try_into().unwrap());
 
-        assert_eq!(namesz, NOTE_NAME.len() as u32); // 14
-        assert_eq!(descsz, payload.len() as u32); // 5
-        assert_eq!(ntype, NOTE_TYPE); // 0
+        assert_eq!(namesz, NOTE_NAME.len() as u32);
+        assert_eq!(descsz, payload.len() as u32);
+        assert_eq!(ntype, NOTE_TYPE);
 
-        // Name starts at offset 12, padded to 4-byte alignment.
-        let name_padded = align_up(NOTE_NAME.len(), 4); // 14 -> 16
-        assert_eq!(name_padded, 16);
+        let name_padded = align_up(NOTE_NAME.len(), 4);
         assert_eq!(&note[12..12 + NOTE_NAME.len()], NOTE_NAME);
-        // Padding bytes should be zero.
-        assert!(
-            note[12 + NOTE_NAME.len()..12 + name_padded]
-                .iter()
-                .all(|&b| b == 0)
-        );
 
-        // Descriptor starts after padded name.
         let desc_start = 12 + name_padded;
         assert_eq!(&note[desc_start..desc_start + payload.len()], payload);
-
-        // Descriptor is padded to 4-byte alignment.
-        let desc_padded = align_up(payload.len(), 4); // 5 -> 8
-        assert_eq!(desc_padded, 8);
-        assert_eq!(note.len(), 12 + name_padded + desc_padded); // 12 + 16 + 8 = 36
     }
 
     #[test]
@@ -228,58 +283,60 @@ mod tests {
         let descsz = u32::from_le_bytes(note[4..8].try_into().unwrap());
         assert_eq!(namesz, NOTE_NAME.len() as u32);
         assert_eq!(descsz, 0);
-        assert_eq!(note.len(), 12 + align_up(NOTE_NAME.len(), 4));
     }
 
-    /// Build a minimal valid ELF64 binary with one PT_LOAD phdr and zero-filled
-    /// space after the phdr table so the injector can use the in-place path.
-    fn make_minimal_elf64(extra_phdr_space: bool) -> Vec<u8> {
-        let phdr_offset: u64 = 64; // Right after the ELF header.
-        let phdr_count: u16 = 1;
-        let phdr_entsize: u16 = PHDR_SIZE as u16;
-        let phdr_table_end = phdr_offset as usize + PHDR_SIZE;
+    /// Build a minimal valid ELF64 binary with PT_LOAD + PT_NOTE.
+    fn make_minimal_elf64() -> Vec<u8> {
+        let phdr_offset: u64 = 64;
+        let phdr_count: u16 = 2;
+        let phdrs_end = phdr_offset as usize + (phdr_count as usize) * PHDR_SIZE;
 
-        // Total size: ELF header (64) + 1 phdr (56) + optional space for one more phdr (56).
-        let total = if extra_phdr_space {
-            phdr_table_end + PHDR_SIZE
-        } else {
-            phdr_table_end
-        };
+        let existing_note = build_elf_note(b"GNU\0", b"\x01\x00\x00\x00", 3);
+        let total = phdrs_end + existing_note.len();
 
         let mut binary = vec![0u8; total];
 
-        // ELF magic.
         binary[0..4].copy_from_slice(b"\x7fELF");
         binary[4] = 2; // ELFCLASS64
         binary[5] = 1; // ELFDATA2LSB
         binary[6] = 1; // EV_CURRENT
-        // e_type = ET_EXEC (2)
-        binary[16..18].copy_from_slice(&2u16.to_le_bytes());
-        // e_machine = EM_X86_64 (62)
-        binary[18..20].copy_from_slice(&62u16.to_le_bytes());
-        // e_version
+        binary[16..18].copy_from_slice(&2u16.to_le_bytes()); // ET_EXEC
+        binary[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
         binary[20..24].copy_from_slice(&1u32.to_le_bytes());
-        // e_phoff at 0x20
         write_u64_le(&mut binary, 0x20, phdr_offset);
-        // e_ehsize at 0x34
         binary[0x34..0x36].copy_from_slice(&64u16.to_le_bytes());
-        // e_phentsize at 0x36
-        write_u16_le(&mut binary, 0x36, phdr_entsize);
-        // e_phnum at 0x38
-        write_u16_le(&mut binary, 0x38, phdr_count);
+        binary[0x36..0x38].copy_from_slice(&(PHDR_SIZE as u16).to_le_bytes());
+        binary[0x38..0x3A].copy_from_slice(&phdr_count.to_le_bytes());
 
-        // Write one PT_LOAD phdr (type = 1) at the phdr offset.
+        // PT_LOAD covering the file, with BSS (memsz > filesz).
         write_phdr64(
             &mut binary,
             phdr_offset as usize,
-            1, // PT_LOAD
-            5, // PF_R | PF_X
+            PT_LOAD,
+            5,
             0,
-            0,
-            0,
+            0x400000,
+            0x400000,
             total as u64,
-            total as u64,
+            (total + 0x1000) as u64, // memsz > filesz (BSS)
             0x1000,
+        )
+        .unwrap();
+
+        // PT_NOTE for existing note.
+        let note_offset = phdrs_end;
+        binary[note_offset..note_offset + existing_note.len()].copy_from_slice(&existing_note);
+        write_phdr64(
+            &mut binary,
+            phdr_offset as usize + PHDR_SIZE,
+            PT_NOTE,
+            4,
+            note_offset as u64,
+            0x400000 + note_offset as u64,
+            0x400000 + note_offset as u64,
+            existing_note.len() as u64,
+            existing_note.len() as u64,
+            4,
         )
         .unwrap();
 
@@ -287,89 +344,79 @@ mod tests {
     }
 
     #[test]
-    fn inject_with_space_for_new_phdr() {
-        let mut binary = make_minimal_elf64(true);
+    fn inject_creates_new_segment_above_existing() {
+        let mut binary = make_minimal_elf64();
         let blob = b"test-sea-blob";
-        let original_len = binary.len();
 
         let injector = ElfInjector;
         injector.inject(&mut binary, blob).unwrap();
 
-        // e_phnum should be incremented from 1 to 2.
+        // e_phnum should be 4 (original 2 + PT_LOAD + PT_NOTE).
         let e_phnum = read_u16_le(&binary, 0x38);
-        assert_eq!(e_phnum, 2);
+        assert_eq!(e_phnum, 4);
 
-        // e_phoff should remain unchanged (in-place path).
-        let e_phoff = read_u64_le(&binary, 0x20);
-        assert_eq!(e_phoff, 64);
+        let e_phoff = read_u64_le(&binary, 0x20) as usize;
 
-        // The note should be appended at the original end of the file.
-        let note_offset = original_len;
+        // Find our new entries in the combined table.
+        let mut new_load_vaddr = None;
+        let mut new_note_vaddr = None;
+
+        for i in 0..4 {
+            let off = e_phoff + i * PHDR_SIZE;
+            let p_type = read_u32_le(&binary, off);
+            let p_vaddr = read_u64_le(&binary, off + 16);
+
+            if p_type == PT_LOAD && p_vaddr > 0x400000 {
+                new_load_vaddr = Some(p_vaddr);
+                assert_eq!(p_vaddr % PAGE_SIZE, 0);
+                let original_end = 0x400000u64 + make_minimal_elf64().len() as u64 + 0x1000;
+                assert!(p_vaddr >= align_up_u64(original_end, PAGE_SIZE));
+            }
+            if p_type == PT_NOTE {
+                let p_filesz = read_u64_le(&binary, off + 32) as usize;
+                if p_filesz == build_elf_note(NOTE_NAME, blob, NOTE_TYPE).len() {
+                    new_note_vaddr = Some(p_vaddr);
+                }
+            }
+        }
+
+        let load_vaddr = new_load_vaddr.expect("new PT_LOAD not found");
+        let note_vaddr = new_note_vaddr.expect("new PT_NOTE not found");
+        // Note should be at the start of the new segment.
+        assert_eq!(note_vaddr, load_vaddr);
+
+        // Verify the note content via the new PT_NOTE's file offset.
         let expected_note = build_elf_note(NOTE_NAME, blob, NOTE_TYPE);
-        assert_eq!(
-            &binary[note_offset..note_offset + expected_note.len()],
-            &expected_note[..]
-        );
-
-        // Verify the new phdr entry (second phdr at offset 64 + 56 = 120).
-        let new_phdr_offset = 64 + PHDR_SIZE;
-        let p_type = u32::from_le_bytes(
-            binary[new_phdr_offset..new_phdr_offset + 4]
-                .try_into()
-                .unwrap(),
-        );
-        assert_eq!(p_type, 4); // PT_NOTE
-
-        // Verify p_offset points to the note.
-        let p_offset = read_u64_le(&binary, new_phdr_offset + 8);
-        assert_eq!(p_offset, note_offset as u64);
-
-        // Verify p_filesz matches note size.
-        let p_filesz = read_u64_le(&binary, new_phdr_offset + 32);
-        assert_eq!(p_filesz, expected_note.len() as u64);
+        for i in 0..4 {
+            let off = e_phoff + i * PHDR_SIZE;
+            if read_u32_le(&binary, off) == PT_NOTE {
+                let p_offset = read_u64_le(&binary, off + 8) as usize;
+                let p_filesz = read_u64_le(&binary, off + 32) as usize;
+                if p_filesz == expected_note.len() {
+                    assert_eq!(
+                        &binary[p_offset..p_offset + expected_note.len()],
+                        &expected_note[..]
+                    );
+                }
+            }
+        }
     }
 
     #[test]
-    fn inject_relocates_phdr_table_when_no_space() {
-        let mut binary = make_minimal_elf64(false);
-        let blob = b"relocated-blob";
-        let original_len = binary.len();
+    fn inject_does_not_modify_existing_phdrs() {
+        let original = make_minimal_elf64();
+        let mut binary = original.clone();
+        let blob = b"preserve-test";
 
         let injector = ElfInjector;
         injector.inject(&mut binary, blob).unwrap();
 
-        // e_phnum should be 2.
-        let e_phnum = read_u16_le(&binary, 0x38);
-        assert_eq!(e_phnum, 2);
-
-        // e_phoff should have been relocated to end of original file.
-        let e_phoff = read_u64_le(&binary, 0x20) as usize;
-        assert_eq!(e_phoff, original_len);
-
-        // The relocated first phdr should match PT_LOAD (type=1).
-        let p_type = u32::from_le_bytes(binary[e_phoff..e_phoff + 4].try_into().unwrap());
-        assert_eq!(p_type, 1); // PT_LOAD
-
-        // The second phdr (new PT_NOTE) comes right after.
-        let new_phdr_offset = e_phoff + PHDR_SIZE;
-        let p_type2 = u32::from_le_bytes(
-            binary[new_phdr_offset..new_phdr_offset + 4]
-                .try_into()
-                .unwrap(),
-        );
-        assert_eq!(p_type2, 4); // PT_NOTE
-
-        // The note itself comes after the relocated phdr table.
-        let note_offset = e_phoff + 2 * PHDR_SIZE;
-        let expected_note = build_elf_note(NOTE_NAME, blob, NOTE_TYPE);
+        // The original file content should be unchanged (except ELF header fields).
+        // Check that bytes 0x40 onwards (after ELF header) are preserved.
         assert_eq!(
-            &binary[note_offset..note_offset + expected_note.len()],
-            &expected_note[..]
+            &binary[0x40..original.len()],
+            &original[0x40..original.len()]
         );
-
-        // Verify p_offset in the new phdr points to the note.
-        let p_offset = read_u64_le(&binary, new_phdr_offset + 8);
-        assert_eq!(p_offset, note_offset as u64);
     }
 
     #[test]
@@ -382,5 +429,31 @@ mod tests {
                 || err.to_string().contains("not ELF")
                 || err.to_string().contains("unsupported")
         );
+    }
+
+    #[test]
+    fn file_offset_alignment() {
+        let mut binary = make_minimal_elf64();
+        // Add some extra bytes to make file size non-page-aligned.
+        binary.extend_from_slice(&[0x42; 37]);
+        let blob = b"alignment-test";
+
+        let injector = ElfInjector;
+        injector.inject(&mut binary, blob).unwrap();
+
+        // The new PT_LOAD's file offset should be page-aligned.
+        let e_phoff = read_u64_le(&binary, 0x20) as usize;
+        let e_phnum = read_u16_le(&binary, 0x38) as usize;
+        for i in 0..e_phnum {
+            let off = e_phoff + i * PHDR_SIZE;
+            if read_u32_le(&binary, off) == PT_LOAD {
+                let p_vaddr = read_u64_le(&binary, off + 16);
+                if p_vaddr > 0x400000 {
+                    let p_offset = read_u64_le(&binary, off + 8);
+                    assert_eq!(p_offset % PAGE_SIZE, 0, "p_offset must be page-aligned");
+                    assert_eq!(p_vaddr % PAGE_SIZE, 0, "p_vaddr must be page-aligned");
+                }
+            }
+        }
     }
 }

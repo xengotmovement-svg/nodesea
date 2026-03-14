@@ -9,10 +9,14 @@ use crate::blob::BlobVersion;
 use crate::error::{Error, Result};
 
 /// Minimum Node.js version that supports Single Executable Applications.
-const MIN_SEA_VERSION: Version = Version::new(20, 0, 0);
+/// Node 20 reached EOL in April 2026; Node 22 is the current LTS.
+const MIN_SEA_VERSION: Version = Version::new(22, 0, 0);
 
-/// First Node.js version that uses the V2 blob format.
-const V2_BLOB_VERSION: Version = Version::new(24, 6, 0);
+/// First Node.js version in the 24.x line that uses the V2 blob format.
+const V2_BLOB_VERSION_24: Version = Version::new(24, 6, 0);
+
+/// First Node.js version in the 22.x line that uses the V2 blob format (backported).
+const V2_BLOB_VERSION_22: Version = Version::new(22, 20, 0);
 
 /// Run `node --version` and parse the output into a `semver::Version`.
 ///
@@ -52,7 +56,10 @@ pub fn blob_version(version: &Version) -> Result<BlobVersion> {
     if *version < MIN_SEA_VERSION {
         return Err(Error::UnsupportedNodeVersion(version.to_string()));
     }
-    if *version >= V2_BLOB_VERSION {
+    // V2 was introduced in 24.6.0 and backported to 22.20.0.
+    let is_v2 =
+        *version >= V2_BLOB_VERSION_24 || (version.major == 22 && *version >= V2_BLOB_VERSION_22);
+    if is_v2 {
         Ok(BlobVersion::V2)
     } else {
         Ok(BlobVersion::V1)
@@ -81,22 +88,28 @@ mod tests {
     }
 
     #[test]
-    fn blob_version_error_for_v18() {
-        let v = Version::new(18, 0, 0);
+    fn blob_version_error_for_v20() {
+        let v = Version::new(20, 0, 0);
         let err = blob_version(&v).unwrap_err();
         assert!(matches!(err, Error::UnsupportedNodeVersion(_)));
     }
 
     #[test]
-    fn blob_version_v1_for_v20() {
-        let v = Version::new(20, 0, 0);
+    fn blob_version_v1_for_v22_19() {
+        let v = Version::new(22, 19, 0);
         assert_eq!(blob_version(&v).unwrap(), BlobVersion::V1);
     }
 
     #[test]
-    fn blob_version_v1_for_v22() {
-        let v = Version::new(22, 12, 0);
-        assert_eq!(blob_version(&v).unwrap(), BlobVersion::V1);
+    fn blob_version_v2_for_v22_20() {
+        let v = Version::new(22, 20, 0);
+        assert_eq!(blob_version(&v).unwrap(), BlobVersion::V2);
+    }
+
+    #[test]
+    fn blob_version_v2_for_v22_22() {
+        let v = Version::new(22, 22, 0);
+        assert_eq!(blob_version(&v).unwrap(), BlobVersion::V2);
     }
 
     #[test]

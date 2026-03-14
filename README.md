@@ -10,7 +10,7 @@ Takes a JavaScript or TypeScript source file and a Node.js binary, produces a st
 - **TypeScript support** — `.ts` files are bundled natively, no `tsc` or `tsconfig.json` needed
 - **Auto-download** — if Node.js isn't installed, downloads it from nodejs.org automatically
 - **Zero Node.js dependency** — no `node`, `npm`, or `postject` needed during build
-- **Multi-version support** — Node.js 20.x through 25.x+ (blob V1 and V2 formats)
+- **Multi-version support** — Node.js 22.x through 25.x+ (blob V1 and V2 formats)
 - **Cross-platform injection** — Mach-O (macOS), ELF (Linux), PE (Windows, planned)
 - **Automatic version detection** — detects Node.js version and selects the correct blob format
 - **macOS code signing** — automatic ad-hoc re-signing after injection
@@ -137,7 +137,7 @@ Node.js has built-in SEA support, but the official workflow requires multiple to
 | **Config file** | Optional | Required | Optional |
 | **macOS code signing** | Automatic | Manual step | Automatic |
 | **Implementation** | Pure Rust | Node.js + JS + C++ | Node.js |
-| **Node.js 20–25 support** | Yes (auto-detected) | Version-specific | Stopped at Node 18 |
+| **Node.js 22–25 support** | Yes (auto-detected) | Version-specific | Stopped at Node 18 |
 | **Maintained** | Yes | Yes | Abandoned |
 
 ### The official Node.js SEA workflow
@@ -174,7 +174,7 @@ That's it. One command, no intermediate files, no npm, no manual signing.
 
 - **Single binary, zero runtime deps** — nodesea is a standalone Rust binary. Drop it into a CI pipeline or Docker build stage without installing Node.js or npm.
 - **Built-in bundling** — imports and `node_modules` are resolved automatically via rolldown. No need to run esbuild/webpack as a separate step.
-- **Cross-version** — automatically detects the Node.js version and selects the correct blob format (V1 or V2). Works with Node 20 through 25+.
+- **Cross-version** — automatically detects the Node.js version and selects the correct blob format (V1 or V2). Works with Node 22 through 25+.
 - **Correct by default** — handles Mach-O segment layout, fuse flipping, ad-hoc code signing, and `__LINKEDIT` relocation without user intervention.
 
 ## How It Works
@@ -194,9 +194,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 
 | Node.js | Blob Format | Status |
 |---------|-------------|--------|
-| 20.x | V1 (8-byte header) | Supported |
-| 21.x | V1 (8-byte header) | Supported |
-| 22.x | V1 (8-byte header) | Supported |
+| 22.0–22.19 | V1 (8-byte header) | Supported |
+| 22.20+ | V2 (9-byte header) | Supported |
 | 24.0–24.5 | V1 (8-byte header) | Supported |
 | 24.6+ | V2 (9-byte header) | Supported |
 | 25.x+ | V2 (9-byte header) | Supported |

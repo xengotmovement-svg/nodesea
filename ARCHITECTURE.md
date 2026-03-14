@@ -23,8 +23,8 @@ target Node.js version.
 
 | Version | Node.js range | Header size | Layout |
 |---------|---------------|-------------|--------|
-| V1      | 20.0 -- 24.5  | 8 bytes     | `magic(u32 LE) + flags(u32 LE)` |
-| V2      | 24.6+         | 9 bytes     | `magic(u32 LE) + flags(u32 LE) + exec_argv_extension(u8)` |
+| V1      | 22.0 -- 22.19, 23.x -- 24.5 | 8 bytes | `magic(u32 LE) + flags(u32 LE)` |
+| V2      | 22.20+, 24.6+               | 9 bytes | `magic(u32 LE) + flags(u32 LE) + exec_argv_extension(u8)` |
 
 The magic number is `0x143da20` (little-endian u32), defined in `node_sea.h` in the
 Node.js source tree.
@@ -179,8 +179,30 @@ The blob is injected as a `PT_NOTE` program header entry:
 - **Note name:** `NODE_SEA_BLOB`
 - **Note type:** `0` (Node.js matches by name, not type)
 
-The injection appends a properly aligned ELF note to the binary and adds
-(or repurposes) a `PT_NOTE` entry in the program header table pointing to it.
+At runtime, Node.js uses postject's `dl_iterate_phdr`-based lookup, which
+accesses note data via `dlpi_addr + p_vaddr`. This means the note must be
+within a `PT_LOAD` segment so it's mapped into virtual memory.
+
+The injection algorithm:
+
+1. **Build ELF note** — standard note format with name `NODE_SEA_BLOB\0`.
+2. **Find max virtual address** — scan all `PT_LOAD` segments to find the
+   highest `vaddr + memsz`, then page-align upward.
+3. **Append a new segment** — pad the file to a page-aligned offset, then
+   append: `[note data] [combined phdr table]`. The combined table contains
+   all original program headers plus two new entries (`PT_LOAD` + `PT_NOTE`).
+4. **Create `PT_LOAD`** — maps the appended region at the chosen virtual
+   address with `PF_R`. Both file offset and vaddr are page-aligned to
+   satisfy `p_offset % p_align == p_vaddr % p_align`.
+5. **Create `PT_NOTE`** — points to the note data within the new `PT_LOAD`.
+6. **Update `PT_PHDR`** — if present in the combined table, repoint it to
+   the new table location so that `dl_iterate_phdr` sees all entries.
+7. **Update ELF header** — set `e_phoff` to the combined table and
+   increment `e_phnum`.
+
+Existing program headers and binary data are never modified (only `e_phoff`
+and `e_phnum` in the 64-byte ELF header change). This avoids corrupting
+BSS regions or breaking dynamic linker initialization.
 
 ### PE (Windows)
 
@@ -275,8 +297,8 @@ src/
   codesign.rs       -- macOS ad-hoc code signing
   blob/
     mod.rs          -- Blob types, flags, serialize() dispatcher
-    v1.rs           -- V1 serializer (Node 20--24.5)
-    v2.rs           -- V2 serializer (Node 24.6+)
+    v1.rs           -- V1 serializer (Node 22.0--22.19, 23.x--24.5)
+    v2.rs           -- V2 serializer (Node 22.20+, 24.6+)
   inject/
     mod.rs          -- Format detection, Injector trait, dispatcher
     macho.rs        -- Mach-O injection with __LINKEDIT relocation

@@ -4,8 +4,8 @@
 //! Node's runtime deserializes it at startup using its internal `BlobDeserializer`.
 //!
 //! Two format versions exist:
-//! - **V1** (Node 20.x–24.5.x): 8-byte header (magic + flags)
-//! - **V2** (Node 24.6.0+): 9-byte header (magic + flags + exec_argv_extension)
+//! - **V1** (Node 20.x–22.19.x, 23.x–24.5.x): 8-byte header (magic + flags)
+//! - **V2** (Node 22.20.0+, 24.6.0+): 9-byte header (magic + flags + exec_argv_extension)
 
 pub mod v1;
 pub mod v2;

@@ -2,8 +2,8 @@
 
 ## Implemented
 
-- **SEA Blob V1 Serializer** — Node 20.x–24.5.x (8-byte header: magic + flags)
-- **SEA Blob V2 Serializer** — Node 24.6.0+ (9-byte header with exec_argv_extension)
+- **SEA Blob V1 Serializer** — Node 22.0–22.19, 23.x–24.5 (8-byte header: magic + flags)
+- **SEA Blob V2 Serializer** — Node 22.20+, 24.6+ (9-byte header with exec_argv_extension)
 - **Flags Bitfield** — All known SEA flags: disable warning, snapshot, code cache, assets, exec_argv
 - **sea-config.json Parser** — Compatible with Node.js format, validates required fields, converts to flags
 - **Node Version Detection** — Runs `node --version`, maps to V1/V2 blob format
@@ -30,6 +30,6 @@
 - **Cross-Platform Code Signing** — Pure Rust Mach-O ad-hoc signing (for Linux → macOS builds)
 - **Fat/Universal Binary Support** — Handle macOS universal binaries (arm64 + x86_64)
 - **npm Binary Package** — Thin npm package that downloads the correct binary per platform (like esbuild)
-- **CI Test Matrix** — Test across Node 20/22/24/25 on Linux + macOS
+- ~~**CI Test Matrix** — Test across Node 22/24 on Linux + macOS~~ ✅ Implemented
 - **PE Checksum Recalculation** — Fix PE checksum after resource injection on Windows
 - **Native Addon Bundling** — Automate embedding `.node` files as SEA assets with runtime extraction
