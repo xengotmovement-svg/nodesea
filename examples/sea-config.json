@@ -1,5 +1,0 @@
-{
-  "main": "hello.js",
-  "output": "myapp",
-  "disableExperimentalSEAWarning": true
-}
