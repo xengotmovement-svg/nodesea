@@ -197,6 +197,7 @@ async fn try_bundle(
         format: Some(format),
         code_splitting: Some(rolldown_common::CodeSplittingMode::Bool(false)),
         define: Some(build_define_map()),
+        minify: Some(rolldown_common::RawMinifyOptions::Bool(true)),
         ..Default::default()
     })
     .map_err(|e| format!("rolldown init failed: {e}"))?;
