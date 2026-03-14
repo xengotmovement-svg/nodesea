@@ -16,6 +16,9 @@ anyhow = "1"
 thiserror = "2"
 bitflags = "2"
 which = "7"
+ureq = "3"
+flate2 = "1"
+tar = "0.4"
 rolldown = { path = "../rolldown/crates/rolldown" }
 rolldown_common = { path = "../rolldown/crates/rolldown_common" }
 tokio = { version = "1", features = ["rt", "macros"] }

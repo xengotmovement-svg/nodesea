@@ -8,6 +8,7 @@ Takes a JavaScript or TypeScript source file and a Node.js binary, produces a st
 
 - **Built-in bundling** — automatically bundles imports and `node_modules` via [rolldown](https://rolldown.rs)
 - **TypeScript support** — `.ts` files are bundled natively, no `tsc` or `tsconfig.json` needed
+- **Auto-download** — if Node.js isn't installed, downloads it from nodejs.org automatically
 - **Zero Node.js dependency** — no `node`, `npm`, or `postject` needed during build
 - **Multi-version support** — Node.js 20.x through 25.x+ (blob V1 and V2 formats)
 - **Cross-platform injection** — Mach-O (macOS), ELF (Linux), PE (Windows, planned)
@@ -45,7 +46,8 @@ nodesea --config sea-config.json       # use Node.js-compatible config file
 | `<SCRIPT>` | JavaScript file to embed (derives output name from file stem) |
 | `-o, --output` | Output executable path (default: script name without extension) |
 | `--config <path>` | Path to `sea-config.json` (alternative to positional arg) |
-| `--node <path>` | Path to Node.js binary (default: `node` in PATH) |
+| `--node <path>` | Path to Node.js binary (default: `node` in PATH, or auto-download) |
+| `--node-version <ver>` | Node.js version to download (default: `22.16.0`) |
 | `--no-bundle` | Skip bundling — embed the script as-is |
 | `--no-sign` | Skip macOS ad-hoc code signing |
 | `--dry-run` | Validate and show build plan without modifying files |

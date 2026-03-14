@@ -25,9 +25,15 @@ struct Cli {
     #[arg(long)]
     config: Option<PathBuf>,
 
-    /// Path to the Node.js binary. Defaults to `node` found in PATH.
+    /// Path to the Node.js binary. Defaults to `node` in PATH, or
+    /// auto-downloads from nodejs.org if not found.
     #[arg(long)]
     node: Option<PathBuf>,
+
+    /// Node.js version to download (e.g. "22.16.0"). Only used when
+    /// downloading; ignored if --node is set or node is in PATH.
+    #[arg(long)]
+    node_version: Option<String>,
 
     /// Skip bundling — embed the script as-is without resolving imports.
     #[arg(long)]
@@ -102,14 +108,12 @@ fn main() -> Result<()> {
     // 1. Resolve config.
     let (config, base_dir) = resolve_config(&cli)?;
 
-    // 2. Locate Node binary.
-    let node_path = match &cli.node {
-        Some(p) => p.clone(),
-        None => {
-            eprintln!("[nodesea] Searching for node in PATH...");
-            which::which("node").context("could not find `node` in PATH; use --node to specify")?
-        }
-    };
+    // 2. Locate Node binary (explicit path > PATH > auto-download).
+    let node_path = nodesea::node::resolve_node(
+        cli.node.as_deref(),
+        cli.node_version.as_deref(),
+    )
+    .context("could not find or download Node.js")?;
     eprintln!("[nodesea] Using node: {}", node_path.display());
 
     // 3. Detect Node version.

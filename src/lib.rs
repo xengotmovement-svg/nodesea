@@ -23,4 +23,5 @@ pub mod config;
 pub mod error;
 pub mod fuse;
 pub mod inject;
+pub mod node;
 pub mod version;

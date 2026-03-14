@@ -48,6 +48,10 @@ pub enum Error {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Node.js binary download failed.
+    #[error("download failed: {0}")]
+    DownloadFailed(String),
+
     /// Binary parsing error from goblin.
     #[error("binary parse error: {0}")]
     GoblinError(String),
