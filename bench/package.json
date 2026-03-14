@@ -1,0 +1,16 @@
+{
+  "name": "nodesea-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node tools/generate-code.mjs",
+    "build:bundle": "rolldown -c",
+    "build:binaries": "node tools/build-binaries.mjs",
+    "rebuild": "npm run generate && npm run build:bundle && npm run build:binaries",
+    "bench": "node tools/run-bench.mjs"
+  },
+  "devDependencies": {
+    "postject": "^1.0.0-alpha.6",
+    "rolldown": "1.0.0-rc.3"
+  }
+}

@@ -122,6 +122,42 @@ For advanced options, use a config file compatible with [Node.js SEA config form
 | `assets` | no | Map of virtual name to file path |
 | `execArgv` | no | Baked-in Node.js flags (Node 24.6+) |
 
+## Benchmark
+
+Cold-start CLI startup time. Benchmark adapted from [yyx990803/bun-vs-node-sea-startup](https://github.com/yyx990803/bun-vs-node-sea-startup) (500 modules, 7000 functions, 12 code shapes). macOS arm64, Node.js 24.13.0, Bun 1.3.9, 30 runs.
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `bun-compile+bytecode` | 107.8 ± 1.1 | 106.1 | 110.8 | 1.00 |
+| `nodesea+code-cache` | 135.6 ± 4.3 | 130.1 | 147.2 | 1.26 |
+| `node-sea+code-cache` | 137.1 ± 3.8 | 133.1 | 147.6 | 1.27 |
+| `nodesea` | 155.8 ± 3.9 | 149.9 | 166.5 | 1.45 |
+| `node-sea` | 157.3 ± 3.7 | 152.7 | 166.1 | 1.46 |
+| `bun-compile` | 185.9 ± 1.4 | 183.5 | 189.1 | 1.72 |
+
+| Binary | Size |
+|:---|---:|
+| `bun-compile` | 60 MB |
+| `bun-compile+bytecode` | 83 MB |
+| `nodesea` | 114 MB |
+| `node-sea` | 114 MB |
+| `nodesea+code-cache` | 117 MB |
+| `node-sea+code-cache` | 116 MB |
+
+nodesea produces identical startup performance to the official Node.js SEA toolchain (5-step `node --experimental-sea-config` + `postject` workflow) — in a single command with zero Node.js dependency at build time.
+
+### Run it yourself
+
+```bash
+cargo build --release
+cd bench
+npm install
+npm run rebuild
+npm run bench
+```
+
+Requires: Node.js >= 22, Bun, [hyperfine](https://github.com/sharkdp/hyperfine).
+
 ## Why nodesea?
 
 Node.js has built-in SEA support, but the official workflow requires multiple tools and manual steps. Other tools like `pkg` are abandoned. nodesea replaces the entire toolchain with a single command.
