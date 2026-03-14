@@ -139,10 +139,11 @@ fn dry_run_does_not_create_output() {
     let config_path = tmp_dir.join("sea-config.json");
     fs::write(&config_path, config_json.to_string()).expect("failed to write sea-config.json");
 
-    // Run CLI with --dry-run via `cargo run`.
+    // Run CLI with --dry-run via `cargo run` (using --config mode).
     let cargo_run = Command::new("cargo")
         .args([
             "run",
+            "--quiet",
             "--",
             "--config",
             config_path.to_str().unwrap(),

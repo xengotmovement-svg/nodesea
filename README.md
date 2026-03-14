@@ -22,17 +22,8 @@ cargo install --path .
 # Create your app
 echo 'console.log("Hello from SEA!")' > hello.js
 
-# Create sea-config.json
-cat > sea-config.json << 'EOF'
-{
-  "main": "hello.js",
-  "output": "hello",
-  "disableExperimentalSEAWarning": true
-}
-EOF
-
-# Build the SEA binary
-nodesea --config sea-config.json
+# Build — that's it
+nodesea hello.js
 
 # Run it
 ./hello
@@ -42,19 +33,23 @@ nodesea --config sea-config.json
 ## Usage
 
 ```
-nodesea --config <path> [--node <path>] [--no-sign] [--dry-run]
+nodesea <script.js>                    # output name derived from script
+nodesea <script.js> -o <output>        # explicit output name
+nodesea --config sea-config.json       # use Node.js-compatible config file
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--config <path>` | Path to `sea-config.json` (required) |
+| `<SCRIPT>` | JavaScript file to embed (derives output name from file stem) |
+| `-o, --output` | Output executable path (default: script name without extension) |
+| `--config <path>` | Path to `sea-config.json` (alternative to positional arg) |
 | `--node <path>` | Path to Node.js binary (default: `node` in PATH) |
 | `--no-sign` | Skip macOS ad-hoc code signing |
-| `--dry-run` | Validate config and show build plan without modifying files |
+| `--dry-run` | Validate and show build plan without modifying files |
 
 ## sea-config.json
 
-Compatible with [Node.js SEA config format](https://nodejs.org/api/single-executable-applications.html):
+For advanced options, use a config file compatible with [Node.js SEA config format](https://nodejs.org/api/single-executable-applications.html):
 
 ```json
 {

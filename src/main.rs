@@ -7,14 +7,23 @@ use clap::Parser;
 
 /// Pure Rust Node.js Single Executable Application (SEA) builder.
 ///
-/// Builds a standalone executable from a JavaScript source file and a Node.js
+/// Build a standalone executable from a JavaScript source file and a Node.js
 /// binary, without requiring Node.js at build time.
 #[derive(Parser, Debug)]
 #[command(name = "nodesea", version, about)]
 struct Cli {
-    /// Path to sea-config.json.
+    /// JavaScript file to embed. Derives output name from the file stem
+    /// (e.g. hello.js → hello). Mutually exclusive with --config.
+    #[arg(value_name = "SCRIPT")]
+    script: Option<PathBuf>,
+
+    /// Output executable path (default: script name without extension).
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Path to sea-config.json (alternative to positional SCRIPT arg).
     #[arg(long)]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     /// Path to the Node.js binary. Defaults to `node` found in PATH.
     #[arg(long)]
@@ -24,65 +33,106 @@ struct Cli {
     #[arg(long)]
     no_sign: bool,
 
-    /// Validate config and show what would be done, without modifying files.
+    /// Validate and show what would be done, without modifying files.
     #[arg(long)]
     dry_run: bool,
+}
+
+/// Resolve a `SeaConfig` either from --config or from positional args.
+fn resolve_config(cli: &Cli) -> Result<(nodesea::config::SeaConfig, PathBuf)> {
+    match (&cli.config, &cli.script) {
+        (Some(config_path), None) => {
+            let config = nodesea::config::from_path(config_path)
+                .context("failed to load sea-config.json")?;
+            let base_dir = config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .to_path_buf();
+            Ok((config, base_dir))
+        }
+        (None, Some(script)) => {
+            let main = script
+                .to_str()
+                .context("script path is not valid UTF-8")?
+                .to_string();
+
+            let output = match &cli.output {
+                Some(o) => o
+                    .to_str()
+                    .context("output path is not valid UTF-8")?
+                    .to_string(),
+                None => script
+                    .file_stem()
+                    .context("cannot derive output name from script")?
+                    .to_str()
+                    .context("script stem is not valid UTF-8")?
+                    .to_string(),
+            };
+
+            let config = nodesea::config::SeaConfig {
+                main,
+                output,
+                disable_experimental_sea_warning: true,
+                use_snapshot: false,
+                use_code_cache: false,
+                assets: Default::default(),
+                exec_argv: Default::default(),
+            };
+            let base_dir = PathBuf::from(".");
+            Ok((config, base_dir))
+        }
+        (Some(_), Some(_)) => {
+            anyhow::bail!("cannot use both SCRIPT argument and --config; pick one")
+        }
+        (None, None) => {
+            anyhow::bail!(
+                "provide a JavaScript file or use --config <path>\n\nUsage: nodesea <SCRIPT>\n       nodesea --config sea-config.json"
+            )
+        }
+    }
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // 1. Load and validate sea-config.json.
-    eprintln!("[nodesea] Loading config from {}", cli.config.display());
-    let config =
-        nodesea::config::from_path(&cli.config).context("failed to load sea-config.json")?;
+    // 1. Resolve config.
+    let (config, base_dir) = resolve_config(&cli)?;
 
-    // 2. Resolve the config directory for relative paths.
-    let config_dir = cli
-        .config
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
-
-    // 3. Locate Node binary.
-    let node_path = match cli.node {
-        Some(p) => p,
+    // 2. Locate Node binary.
+    let node_path = match &cli.node {
+        Some(p) => p.clone(),
         None => {
             eprintln!("[nodesea] Searching for node in PATH...");
             which::which("node").context("could not find `node` in PATH; use --node to specify")?
         }
     };
-    eprintln!("[nodesea] Using node binary: {}", node_path.display());
+    eprintln!("[nodesea] Using node: {}", node_path.display());
 
-    // 4. Detect Node version.
+    // 3. Detect Node version.
     let node_version =
         nodesea::version::detect_version(&node_path).context("failed to detect Node.js version")?;
-    eprintln!("[nodesea] Detected Node.js version: {node_version}");
+    eprintln!("[nodesea] Node.js {node_version}");
 
-    // 5. Determine blob version.
+    // 4. Determine blob version.
     let blob_version = nodesea::version::blob_version(&node_version)
         .context("failed to determine blob version")?;
-    eprintln!("[nodesea] Blob format: {blob_version:?}");
 
-    // 6. Read the main JS file.
-    let main_path = config_dir.join(&config.main);
-    eprintln!("[nodesea] Reading main script: {}", main_path.display());
+    // 5. Read the main JS file.
+    let main_path = base_dir.join(&config.main);
     let main_code = std::fs::read(&main_path)
-        .with_context(|| format!("failed to read main script: {}", main_path.display()))?;
+        .with_context(|| format!("failed to read: {}", main_path.display()))?;
 
-    // 7. Read asset files.
+    // 6. Read asset files.
     let mut asset_data: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, file_path) in &config.assets {
-        let full_path = config_dir.join(file_path);
-        eprintln!("[nodesea] Reading asset '{name}': {}", full_path.display());
+        let full_path = base_dir.join(file_path);
         let data = std::fs::read(&full_path)
             .with_context(|| format!("failed to read asset '{name}': {}", full_path.display()))?;
         asset_data.push((name.clone(), data));
     }
 
-    // 8. Build flags and serialize the blob.
+    // 7. Serialize the blob.
     let flags = config.to_flags();
-    eprintln!("[nodesea] Flags: {flags:?}");
-
     let code_path = format!("/sea/{}", config.main);
 
     let assets_refs: Vec<(&str, &[u8])> = asset_data
@@ -102,59 +152,46 @@ fn main() -> Result<()> {
         Some(exec_argv_refs.as_slice())
     };
 
-    eprintln!("[nodesea] Serializing SEA blob...");
     let blob = nodesea::blob::serialize(
         blob_version,
         &code_path,
         &main_code,
         flags,
-        None, // code_cache: not generated by nodesea
+        None,
         assets_opt,
         exec_argv_opt,
     )
     .context("failed to serialize SEA blob")?;
-    eprintln!("[nodesea] Blob size: {} bytes", blob.len());
+    eprintln!("[nodesea] Blob: {} bytes", blob.len());
 
-    // 9. Dry-run: print summary and exit.
+    // 8. Dry-run: print summary and exit.
     if cli.dry_run {
         eprintln!();
         eprintln!("[nodesea] === DRY RUN ===");
-        eprintln!("[nodesea] Config:       {}", cli.config.display());
-        eprintln!("[nodesea] Node binary:  {}", node_path.display());
-        eprintln!("[nodesea] Node version: {node_version}");
-        eprintln!("[nodesea] Blob format:  {blob_version:?}");
-        eprintln!("[nodesea] Main script:  {}", main_path.display());
-        eprintln!("[nodesea] Assets:       {}", config.assets.len());
-        eprintln!("[nodesea] Blob size:    {} bytes", blob.len());
-        eprintln!("[nodesea] Output:       {}", config.output);
+        eprintln!("[nodesea] Script:      {}", main_path.display());
+        eprintln!("[nodesea] Output:      {}", config.output);
         eprintln!(
-            "[nodesea] Code signing: {}",
-            if cfg!(target_os = "macos") && !cli.no_sign {
-                "yes"
-            } else {
-                "no"
-            }
+            "[nodesea] Node:        {} (v{node_version})",
+            node_path.display()
+        );
+        eprintln!(
+            "[nodesea] Blob format: {blob_version:?}, {} bytes",
+            blob.len()
         );
         eprintln!("[nodesea] No files were modified.");
         return Ok(());
     }
 
-    // 10. Copy the Node binary to the output path.
-    let output_path = config_dir.join(&config.output);
-    eprintln!(
-        "[nodesea] Copying {} -> {}",
-        node_path.display(),
-        output_path.display()
-    );
+    // 9. Copy the Node binary to the output path.
+    let output_path = base_dir.join(&config.output);
     std::fs::copy(&node_path, &output_path).with_context(|| {
         format!(
-            "failed to copy {} to {}",
+            "failed to copy {} -> {}",
             node_path.display(),
             output_path.display()
         )
     })?;
 
-    // Make the output file executable on Unix.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -162,36 +199,28 @@ fn main() -> Result<()> {
             .with_context(|| format!("failed to set permissions on {}", output_path.display()))?;
     }
 
-    // 11. Read the output binary, inject the blob, and write it back.
-    eprintln!("[nodesea] Injecting SEA blob...");
+    // 10. Inject blob + flip fuse.
+    eprintln!("[nodesea] Injecting blob...");
     let mut binary = std::fs::read(&output_path)
-        .with_context(|| format!("failed to read output binary: {}", output_path.display()))?;
+        .with_context(|| format!("failed to read: {}", output_path.display()))?;
 
-    nodesea::inject::inject(&mut binary, &blob).context("failed to inject SEA blob into binary")?;
+    nodesea::inject::inject(&mut binary, &blob).context("failed to inject SEA blob")?;
 
-    // 12. Flip the fuse.
-    eprintln!("[nodesea] Flipping SEA fuse...");
+    eprintln!("[nodesea] Flipping fuse...");
     nodesea::fuse::flip_fuse(&mut binary).context("failed to flip SEA fuse")?;
 
-    // Write modified binary back.
     std::fs::write(&output_path, &binary)
-        .with_context(|| format!("failed to write output binary: {}", output_path.display()))?;
+        .with_context(|| format!("failed to write: {}", output_path.display()))?;
 
-    // 13. Code sign on macOS (unless --no-sign).
+    // 11. Code sign on macOS.
     #[cfg(target_os = "macos")]
     {
         if !cli.no_sign {
-            eprintln!("[nodesea] Ad-hoc code signing...");
-            nodesea::codesign::codesign_adhoc(&output_path)
-                .context("failed to ad-hoc codesign output binary")?;
-        } else {
-            eprintln!("[nodesea] Skipping code signing (--no-sign)");
+            eprintln!("[nodesea] Signing...");
+            nodesea::codesign::codesign_adhoc(&output_path).context("failed to codesign output")?;
         }
     }
 
-    // 14. Success.
-    eprintln!();
-    eprintln!("[nodesea] Success! Output: {}", output_path.display());
-
+    eprintln!("[nodesea] Built: {}", output_path.display());
     Ok(())
 }
