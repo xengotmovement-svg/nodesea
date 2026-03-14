@@ -19,8 +19,8 @@ which = "7"
 ureq = "3"
 flate2 = "1"
 tar = "0.4"
-rolldown = { path = "../rolldown/crates/rolldown" }
-rolldown_common = { path = "../rolldown/crates/rolldown_common" }
+rolldown = { git = "https://github.com/rolldown/rolldown.git", rev = "1ee3871" }
+rolldown_common = { git = "https://github.com/rolldown/rolldown.git", rev = "1ee3871" }
 tokio = { version = "1", features = ["rt", "macros"] }
 
 [dev-dependencies]
