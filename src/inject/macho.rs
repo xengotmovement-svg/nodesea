@@ -491,7 +491,7 @@ fn fixup_u32_offset(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
 
@@ -499,7 +499,6 @@ mod tests {
     /// Prefers the Node.js binary (which has ample space), falls back to
     /// `which node`, then /usr/bin/true. Returns None if no suitable
     /// single-arch binary is available.
-    #[cfg(target_os = "macos")]
     fn find_test_binary() -> Option<Vec<u8>> {
         let candidates = ["/tmp/node-v22.16.0-darwin-arm64/bin/node"];
 
@@ -532,7 +531,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn inject_blob_into_macho_binary() {
         let mut binary = match find_test_binary() {
             Some(b) => b,
@@ -586,7 +584,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn injected_binary_can_be_codesigned() {
         let mut binary = match find_test_binary() {
             Some(b) => b,
@@ -626,7 +623,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
     fn insufficient_header_space_detected() {
         // /usr/bin/true is a small binary with minimal header space
         let original = std::fs::read("/usr/bin/true").expect("failed to read /usr/bin/true");
