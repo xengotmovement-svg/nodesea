@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 description = "Pure Rust Node.js Single Executable Application (SEA) builder"
 license = "MIT"
+repository = "https://github.com/user/nodesea"
+readme = "README.md"
+keywords = ["nodejs", "sea", "executable", "single-executable"]
+categories = ["development-tools", "command-line-utilities"]
+publish = false  # Distributed as binary via GitHub Releases
 
 [dependencies]
 goblin = "0.9"

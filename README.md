@@ -16,12 +16,23 @@ Takes a JavaScript or TypeScript source file and a Node.js binary, produces a st
 - **macOS code signing** — automatic ad-hoc re-signing after injection
 - **Config compatible** — uses the same `sea-config.json` format as Node.js
 
+## Install
+
+```bash
+# One-line install (macOS / Linux)
+curl -fsSL https://raw.githubusercontent.com/user/nodesea/main/install.sh | sh
+
+# Or download from GitHub Releases
+# https://github.com/user/nodesea/releases
+
+# Or build from source
+git clone https://github.com/user/nodesea.git && cd nodesea
+cargo install --path .
+```
+
 ## Quick Start
 
 ```bash
-# Install
-cargo install --path .
-
 # Create your app
 echo 'console.log("Hello from SEA!")' > hello.js
 
